@@ -1,0 +1,10 @@
+node_modules/
+.npm-cache/
+data/
+.env
+npm-debug.log*
+.DS_Store
+
+logs/
+bot.stdout.log
+bot.stderr.log
