@@ -2,6 +2,179 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+const SCHEMA_VERSION = 1;
+
+const REGISTERED_PLAYERS_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS registered_players (
+    guild_id TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    pubg_account_id TEXT NOT NULL,
+    pubg_name TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (guild_id, discord_user_id)
+  );
+`;
+
+const PARTY_SESSIONS_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS party_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    owner_user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    reviewed_at TEXT,
+    ended_at TEXT,
+    last_synced_match_at TEXT,
+    synced_match_count INTEGER NOT NULL DEFAULT 0,
+    review_snapshot_json TEXT,
+    status TEXT NOT NULL CHECK (
+      status IN ('recruiting', 'active', 'reviewing', 'completed')
+    )
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS open_party_per_channel
+    ON party_sessions (guild_id, channel_id)
+    WHERE status IN ('recruiting', 'active', 'reviewing');
+`;
+
+const PARTY_MEMBERS_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS party_members (
+    session_id INTEGER NOT NULL REFERENCES party_sessions(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, discord_user_id)
+  );
+`;
+
+const PARTY_MISSIONS_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS party_missions (
+    session_id INTEGER NOT NULL REFERENCES party_sessions(id) ON DELETE CASCADE,
+    mission_key TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK (scope IN ('team', 'personal')),
+    reward_points INTEGER NOT NULL CHECK (reward_points > 0),
+    selected_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, mission_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS mission_completions (
+    session_id INTEGER NOT NULL,
+    mission_key TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    match_id TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, mission_key, discord_user_id),
+    FOREIGN KEY (session_id, mission_key)
+      REFERENCES party_missions(session_id, mission_key)
+      ON DELETE CASCADE
+  );
+`;
+
+function tableExists(database, tableName) {
+  return Boolean(
+    database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName),
+  );
+}
+
+function getSchemaVersion(database) {
+  return Number(database.prepare("PRAGMA user_version;").get().user_version);
+}
+
+function createCurrentSchema(database) {
+  database.exec(`
+    ${REGISTERED_PLAYERS_SCHEMA}
+    ${PARTY_SESSIONS_SCHEMA}
+    ${PARTY_MEMBERS_SCHEMA}
+    ${PARTY_MISSIONS_SCHEMA}
+  `);
+}
+
+function migrateLegacyPartySchema(database) {
+  database.exec("PRAGMA foreign_keys = OFF;");
+
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+
+      DROP INDEX IF EXISTS active_party_per_channel;
+      ALTER TABLE party_members RENAME TO party_members_legacy;
+      ALTER TABLE party_sessions RENAME TO party_sessions_legacy;
+
+      ${PARTY_SESSIONS_SCHEMA}
+      ${PARTY_MEMBERS_SCHEMA}
+
+      INSERT INTO party_sessions (
+        id,
+        guild_id,
+        channel_id,
+        owner_user_id,
+        created_at,
+        started_at,
+        ended_at,
+        status
+      )
+      SELECT
+        id,
+        guild_id,
+        channel_id,
+        owner_user_id,
+        started_at,
+        started_at,
+        ended_at,
+        status
+      FROM party_sessions_legacy;
+
+      INSERT INTO party_members (session_id, discord_user_id, joined_at)
+      SELECT session_id, discord_user_id, joined_at
+      FROM party_members_legacy;
+
+      DROP TABLE party_members_legacy;
+      DROP TABLE party_sessions_legacy;
+
+      ${PARTY_MISSIONS_SCHEMA}
+
+      PRAGMA user_version = ${SCHEMA_VERSION};
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) {
+      database.exec("ROLLBACK;");
+    }
+    throw error;
+  } finally {
+    database.exec("PRAGMA foreign_keys = ON;");
+  }
+
+  const violations = database.prepare("PRAGMA foreign_key_check;").all();
+  if (violations.length > 0) {
+    throw new Error("SQLite 마이그레이션 후 외래 키 무결성 검사에 실패했습니다.");
+  }
+}
+
+function initializeDatabase(database) {
+  database.exec(REGISTERED_PLAYERS_SCHEMA);
+
+  const currentVersion = getSchemaVersion(database);
+  if (currentVersion > SCHEMA_VERSION) {
+    throw new Error(
+      `지원하지 않는 SQLite 스키마 버전입니다. ` +
+        `(현재: ${currentVersion}, 지원: ${SCHEMA_VERSION})`,
+    );
+  }
+
+  if (currentVersion === 0 && tableExists(database, "party_sessions")) {
+    migrateLegacyPartySchema(database);
+    return;
+  }
+
+  createCurrentSchema(database);
+  database.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+}
+
 export function createRepository(databasePath = "data/bot.sqlite") {
   const resolvedPath = databasePath === ":memory:" ? databasePath : resolve(databasePath);
 
@@ -12,39 +185,7 @@ export function createRepository(databasePath = "data/bot.sqlite") {
   const database = new DatabaseSync(resolvedPath);
   database.exec("PRAGMA foreign_keys = ON;");
   database.exec("PRAGMA journal_mode = WAL;");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS registered_players (
-      guild_id TEXT NOT NULL,
-      discord_user_id TEXT NOT NULL,
-      pubg_account_id TEXT NOT NULL,
-      pubg_name TEXT NOT NULL,
-      platform TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (guild_id, discord_user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS party_sessions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      guild_id TEXT NOT NULL,
-      channel_id TEXT NOT NULL,
-      owner_user_id TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      ended_at TEXT,
-      status TEXT NOT NULL CHECK (status IN ('active', 'completed'))
-    );
-
-    CREATE UNIQUE INDEX IF NOT EXISTS active_party_per_channel
-      ON party_sessions (guild_id, channel_id)
-      WHERE status = 'active';
-
-    CREATE TABLE IF NOT EXISTS party_members (
-      session_id INTEGER NOT NULL REFERENCES party_sessions(id) ON DELETE CASCADE,
-      discord_user_id TEXT NOT NULL,
-      joined_at TEXT NOT NULL,
-      PRIMARY KEY (session_id, discord_user_id)
-    );
-  `);
+  initializeDatabase(database);
 
   return new BotRepository(database);
 }
@@ -90,10 +231,10 @@ export class BotRepository {
   }
 
   createPartySession({ guildId, channelId, ownerUserId }) {
-    const activeSession = this.getActivePartySession(guildId, channelId);
+    const openSession = this.getOpenPartySession(guildId, channelId);
 
-    if (activeSession) {
-      return { session: activeSession, created: false };
+    if (openSession) {
+      return { session: openSession, created: false };
     }
 
     const now = new Date().toISOString();
@@ -103,10 +244,10 @@ export class BotRepository {
       const result = this.database
         .prepare(`
           INSERT INTO party_sessions (
-            guild_id, channel_id, owner_user_id, started_at, status
-          ) VALUES (?, ?, ?, ?, 'active')
+            guild_id, channel_id, owner_user_id, created_at, started_at, status
+          ) VALUES (?, ?, ?, ?, ?, 'active')
         `)
-        .run(guildId, channelId, ownerUserId, now);
+        .run(guildId, channelId, ownerUserId, now, now);
       const sessionId = Number(result.lastInsertRowid);
 
       this.database
@@ -132,13 +273,43 @@ export class BotRepository {
           guild_id AS guildId,
           channel_id AS channelId,
           owner_user_id AS ownerUserId,
+          created_at AS createdAt,
           started_at AS startedAt,
+          reviewed_at AS reviewedAt,
           ended_at AS endedAt,
+          last_synced_match_at AS lastSyncedMatchAt,
+          synced_match_count AS syncedMatchCount,
+          review_snapshot_json AS reviewSnapshotJson,
           status
         FROM party_sessions
         WHERE id = ?
       `)
       .get(sessionId);
+  }
+
+  getOpenPartySession(guildId, channelId) {
+    return this.database
+      .prepare(`
+        SELECT
+          id,
+          guild_id AS guildId,
+          channel_id AS channelId,
+          owner_user_id AS ownerUserId,
+          created_at AS createdAt,
+          started_at AS startedAt,
+          reviewed_at AS reviewedAt,
+          ended_at AS endedAt,
+          last_synced_match_at AS lastSyncedMatchAt,
+          synced_match_count AS syncedMatchCount,
+          review_snapshot_json AS reviewSnapshotJson,
+          status
+        FROM party_sessions
+        WHERE guild_id = ?
+          AND channel_id = ?
+          AND status IN ('recruiting', 'active', 'reviewing')
+        LIMIT 1
+      `)
+      .get(guildId, channelId);
   }
 
   getActivePartySession(guildId, channelId) {
@@ -149,8 +320,13 @@ export class BotRepository {
           guild_id AS guildId,
           channel_id AS channelId,
           owner_user_id AS ownerUserId,
+          created_at AS createdAt,
           started_at AS startedAt,
+          reviewed_at AS reviewedAt,
           ended_at AS endedAt,
+          last_synced_match_at AS lastSyncedMatchAt,
+          synced_match_count AS syncedMatchCount,
+          review_snapshot_json AS reviewSnapshotJson,
           status
         FROM party_sessions
         WHERE guild_id = ? AND channel_id = ? AND status = 'active'
@@ -195,7 +371,7 @@ export class BotRepository {
       .prepare(`
         UPDATE party_sessions
         SET status = 'completed', ended_at = ?
-        WHERE id = ? AND status = 'active'
+        WHERE id = ? AND status IN ('recruiting', 'active', 'reviewing')
       `)
       .run(new Date().toISOString(), sessionId);
 
