@@ -135,21 +135,21 @@ test("팀 평균 기여도의 절반 이하인 플레이어를 인간쓰레기�
   assert.match(report.awards.trolls[0].trollReasons[0], /인분/);
 });
 
-test("ACE와 오늘의 씹쓰레기는 중복 수상할 수 있다", () => {
+test("팀킬한 플레이어는 성적이 가장 좋아도 ACE에서 제외한다", () => {
   const match = {
     bestPlacement: 2,
     players: [
       partyPlayer("user-1", {
-        kills: 2,
-        assists: 1,
-        damage: 300,
+        kills: 10,
+        assists: 3,
+        damage: 1_200,
         deaths: 0,
-        friendlyKnocks: 1,
+        friendlyKills: 1,
       }),
       partyPlayer("user-2", {
-        kills: 2,
-        assists: 1,
-        damage: 300,
+        kills: 8,
+        assists: 2,
+        damage: 1_000,
         deaths: 1,
       }),
     ],
@@ -158,8 +158,26 @@ test("ACE와 오늘의 씹쓰레기는 중복 수상할 수 있다", () => {
   const report = buildPartyReport([match], members);
 
   assert.equal(report.awards.trolls[0].discordUserId, "user-1");
-  assert.equal(report.awards.trolls[0].trollReasons[0], "아군 기절 1회");
-  assert.equal(report.awards.ace.discordUserId, "user-1");
+  assert.equal(report.awards.trolls[0].trollReasons[0], "팀킬 1회");
+  assert.equal(report.awards.ace.discordUserId, "user-2");
+});
+
+test("모든 플레이어가 오늘의 씹쓰레기면 ACE를 선정하지 않는다", () => {
+  const match = {
+    bestPlacement: 2,
+    players: [
+      partyPlayer("user-1", { kills: 3, damage: 500, friendlyKills: 1 }),
+      partyPlayer("user-2", { kills: 2, damage: 400, friendlyKnocks: 1 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.deepEqual(
+    report.awards.trolls.map((player) => player.discordUserId),
+    ["user-1", "user-2"],
+  );
+  assert.equal(report.awards.ace, null);
 });
 
 test("ACE는 평균 딜, 평균 킬, 평균 도움만으로 계산한다", () => {

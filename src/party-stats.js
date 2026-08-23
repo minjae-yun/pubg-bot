@@ -163,6 +163,12 @@ export function buildPartyReport(matches, members) {
       averageContribution > 0 ? player.contributionScore / averageContribution : 0;
   }
   const trolls = pickTrolls(players);
+  const trollUserIds = new Set(
+    trolls.map((player) => player.discordUserId),
+  );
+  const aceCandidates = players.filter(
+    (player) => !trollUserIds.has(player.discordUserId),
+  );
 
   return {
     matches: matches.length,
@@ -171,7 +177,7 @@ export function buildPartyReport(matches, members) {
     bestPlacement: Number.isFinite(bestPlacement) ? bestPlacement : 0,
     players,
     awards: {
-      ace: pickHighest(players, "contributionScore", ["averageDamage", "kills"]),
+      ace: pickHighest(aceCandidates, "contributionScore", ["averageDamage", "kills"]),
       squadBreaker: pickSquadBreakers(players),
       trolls,
     },
