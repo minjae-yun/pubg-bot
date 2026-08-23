@@ -26,6 +26,7 @@ import { PubgApiError } from "./pubg-api.js";
 import { extractRecentPlayerMatch } from "./recent-stats.js";
 import { buildRecentStatsEmbed } from "./recent-stats-embed.js";
 import { buildStatsEmbed } from "./stats-embed.js";
+import { countSameSquadKills } from "./squad-kills.js";
 
 const MAX_PARTY_MEMBERS = 10;
 
@@ -472,12 +473,14 @@ async function finishParty(interaction, session, pubgApi, repository) {
   );
   const partyMatches = selectedMatches.map(({ partyMatch }, index) => {
     const friendlyKnocks = countFriendlyKnocks(telemetries[index], accountIds);
+    const squadKills = countSameSquadKills(telemetries[index], accountIds);
 
     return {
       ...partyMatch,
       players: partyMatch.players.map((player) => ({
         ...player,
         friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
+        squadBreakerCount: squadKills.get(player.accountId)?.count ?? 0,
       })),
     };
   });

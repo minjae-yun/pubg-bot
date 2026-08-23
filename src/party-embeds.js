@@ -107,6 +107,10 @@ export function buildPartyButtons(sessionId, status = "recruiting") {
 
 export function buildPartyReportEmbed(report, session) {
   const awards = report.awards;
+  const squadBreakerWinners = awards.squadBreaker
+    .map((player) => `<@${player.discordUserId}>`)
+    .join(" · ");
+  const squadBreakerCount = awards.squadBreaker[0]?.squadBreakerCount ?? 0;
   const trollWinners = awards.trolls
     .map(
       (player) =>
@@ -114,16 +118,17 @@ export function buildPartyReportEmbed(report, session) {
     )
     .join(", ");
   const awardLines = [
-    awards.mvp
-      ? `🏆 **오늘의 MVP** <@${awards.mvp.discordUserId}> (KDA ${formatRatio(awards.mvp.kda)})`
+    awards.ace
+      ? `**ACE** <@${awards.ace.discordUserId}> ` +
+        `(평균 ${awards.ace.averageKills.toFixed(1)}킬 · ` +
+        `${integerFormatter.format(awards.ace.averageDamage)}딜 · ` +
+        `${awards.ace.averageAssists.toFixed(1)}도움)`
       : null,
-    awards.killKing
-      ? `🎯 **킬왕** <@${awards.killKing.discordUserId}> (${integerFormatter.format(awards.killKing.kills)}킬)`
+    awards.squadBreaker.length > 0
+      ? `**SQUAD BREAKER** ${squadBreakerWinners} ` +
+        `(한 경기에서 동일 적 스쿼드 ${squadBreakerCount}명 처치)`
       : null,
-    awards.damageKing
-      ? `💥 **딜왕** <@${awards.damageKing.discordUserId}> (평균딜 ${integerFormatter.format(awards.damageKing.averageDamage)})`
-      : null,
-    `🤡 **오늘의 쓰레기** ${trollWinners}`,
+    `**오늘의 씹쓰레기** ${trollWinners}`,
   ].filter(Boolean);
   const playerLines = report.players.map(
     (player) =>
@@ -159,7 +164,7 @@ export function buildPartyReportEmbed(report, session) {
       },
     )
     .setFooter({
-      text: "MVP는 파티 기간 KDA, 킬왕은 총킬, 딜왕은 평균딜 기준입니다.",
+      text: "ACE는 평균 딜 + 평균 킬×100 + 평균 도움×50 기준입니다.",
     })
     .setTimestamp()
     .setAuthor({ name: `파티 시작: ${new Date(startedTimestamp * 1_000).toLocaleString("ko-KR")}` });

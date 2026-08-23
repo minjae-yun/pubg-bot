@@ -90,6 +90,8 @@ export function buildPartyReport(matches, members) {
         deaths: 0,
         survivalSeconds: 0,
         wins: 0,
+        squadBreakerCount: 0,
+        squadBreakerMatchId: null,
       },
     ]),
   );
@@ -119,6 +121,10 @@ export function buildPartyReport(matches, members) {
       report.deaths += player.deaths;
       report.survivalSeconds += player.survivalSeconds;
       report.wins += player.placement === 1 ? 1 : 0;
+      if (safeNumber(player.squadBreakerCount) > report.squadBreakerCount) {
+        report.squadBreakerCount = safeNumber(player.squadBreakerCount);
+        report.squadBreakerMatchId = match.matchId ?? null;
+      }
       totalKills += player.kills;
       teamDamage += player.damage;
     }
@@ -136,8 +142,7 @@ export function buildPartyReport(matches, members) {
       const contributionScore =
         averageDamage +
         averageKills * 100 +
-        averageAssists * 50 +
-        averageRevives * 50;
+        averageAssists * 50;
 
       return {
         ...player,
@@ -160,10 +165,6 @@ export function buildPartyReport(matches, members) {
       averageContribution > 0 ? player.contributionScore / averageContribution : 0;
   }
   const trolls = pickTrolls(players);
-  const trollIds = new Set(trolls.map((player) => player.discordUserId));
-  const positiveAwardPlayers = players.filter(
-    (player) => !trollIds.has(player.discordUserId),
-  );
 
   return {
     matches: matches.length,
@@ -172,9 +173,8 @@ export function buildPartyReport(matches, members) {
     bestPlacement: Number.isFinite(bestPlacement) ? bestPlacement : 0,
     players,
     awards: {
-      mvp: pickHighest(positiveAwardPlayers, "kda", ["averageDamage", "kills"]),
-      killKing: pickHighest(positiveAwardPlayers, "kills", ["averageDamage", "kda"]),
-      damageKing: pickHighest(positiveAwardPlayers, "averageDamage", ["kills", "kda"]),
+      ace: pickHighest(players, "contributionScore", ["averageDamage", "kills"]),
+      squadBreaker: pickSquadBreakers(players),
       trolls,
     },
   };
@@ -217,6 +217,21 @@ function safeNumberForComparison(value) {
   }
 
   return safeNumber(value);
+}
+
+function pickSquadBreakers(players) {
+  const highestCount = players.reduce(
+    (highest, player) => Math.max(highest, safeNumber(player.squadBreakerCount)),
+    0,
+  );
+
+  if (highestCount < 2) {
+    return [];
+  }
+
+  return players.filter(
+    (player) => safeNumber(player.squadBreakerCount) === highestCount,
+  );
 }
 
 function pickTrolls(players) {

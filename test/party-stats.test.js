@@ -82,9 +82,8 @@ test("파티 시작 이후 매치에서 멤버 기록과 어워드를 계산한�
   assert.equal(report.bestPlacement, 2);
   assert.equal(report.totalKills, 2);
   assert.equal(report.averageTeamDamage, 600);
-  assert.equal(report.awards.mvp.discordUserId, "user-1");
-  assert.equal(report.awards.killKing.discordUserId, "user-1");
-  assert.equal(report.awards.damageKing.discordUserId, "user-1");
+  assert.equal(report.awards.ace.discordUserId, "user-1");
+  assert.deepEqual(report.awards.squadBreaker, []);
   assert.deepEqual(
     report.awards.trolls.map((player) => player.discordUserId),
     ["user-2"],
@@ -136,7 +135,7 @@ test("팀 평균 기여도의 절반 이하인 플레이어를 인간쓰레기�
   assert.match(report.awards.trolls[0].trollReasons[0], /인분/);
 });
 
-test("아군을 기절시킨 플레이어는 긍정 어워드에서 제외한다", () => {
+test("ACE와 오늘의 씹쓰레기는 중복 수상할 수 있다", () => {
   const match = {
     bestPlacement: 2,
     players: [
@@ -160,9 +159,67 @@ test("아군을 기절시킨 플레이어는 긍정 어워드에서 제외한다
 
   assert.equal(report.awards.trolls[0].discordUserId, "user-1");
   assert.equal(report.awards.trolls[0].trollReasons[0], "아군 기절 1회");
-  assert.equal(report.awards.mvp.discordUserId, "user-2");
-  assert.equal(report.awards.killKing.discordUserId, "user-2");
-  assert.equal(report.awards.damageKing.discordUserId, "user-2");
+  assert.equal(report.awards.ace.discordUserId, "user-1");
+});
+
+test("ACE는 평균 딜, 평균 킬, 평균 도움만으로 계산한다", () => {
+  const match = {
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { damage: 300, revives: 0 }),
+      partyPlayer("user-2", { damage: 200, revives: 10 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.equal(report.awards.ace.discordUserId, "user-1");
+  assert.equal(report.players[0].contributionScore, 300);
+  assert.equal(report.players[1].contributionScore, 200);
+});
+
+test("파티 전체 경기의 최고 동일 스쿼드 처치 기록으로 공동 수상자를 정한다", () => {
+  const matches = [
+    {
+      matchId: "match-1",
+      bestPlacement: 5,
+      players: [
+        partyPlayer("user-1", { squadBreakerCount: 3 }),
+        partyPlayer("user-2", { squadBreakerCount: 2 }),
+      ],
+    },
+    {
+      matchId: "match-2",
+      bestPlacement: 4,
+      players: [
+        partyPlayer("user-1", { squadBreakerCount: 1 }),
+        partyPlayer("user-2", { squadBreakerCount: 3 }),
+      ],
+    },
+  ];
+
+  const report = buildPartyReport(matches, members);
+
+  assert.deepEqual(
+    report.awards.squadBreaker.map((player) => player.discordUserId),
+    ["user-1", "user-2"],
+  );
+  assert.equal(report.players[0].squadBreakerCount, 3);
+  assert.equal(report.players[0].squadBreakerMatchId, "match-1");
+  assert.equal(report.players[1].squadBreakerMatchId, "match-2");
+});
+
+test("동일 적 스쿼드 최고 기록이 1명이면 SQUAD BREAKER를 숨긴다", () => {
+  const match = {
+    matchId: "match-1",
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { squadBreakerCount: 1 }),
+      partyPlayer("user-2", { squadBreakerCount: 0 }),
+    ],
+  };
+
+  assert.deepEqual(buildPartyReport([match], members).awards.squadBreaker, []);
 });
 
 test("파티 시작 전 매치는 제외한다", () => {
@@ -192,6 +249,7 @@ function partyPlayer(
     friendlyKills = 0,
     friendlyKnocks = 0,
     deaths = 1,
+    squadBreakerCount = 0,
   } = {},
 ) {
   return {
@@ -203,6 +261,7 @@ function partyPlayer(
     friendlyKills,
     friendlyKnocks,
     deaths,
+    squadBreakerCount,
     headshotKills: 0,
     placement: 5,
     survivalSeconds: 1000,
