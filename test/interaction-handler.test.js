@@ -83,6 +83,9 @@ test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으�
         status: "recruiting",
       };
     },
+    getRecentPartyMissionKeys() {
+      return ["team-12-kills", "personal-7-kills"];
+    },
     startPartySession(sessionId, missions) {
       startedSessionId = sessionId;
       selectedMissions = missions;
@@ -123,6 +126,12 @@ test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으�
   assert.equal(
     selectedMissions.filter((mission) => mission.scope === "personal").length,
     4,
+  );
+  assert.equal(
+    selectedMissions.some((mission) =>
+      ["team-12-kills", "personal-7-kills"].includes(mission.key),
+    ),
+    false,
   );
   assert.equal(updates.length, 1);
   assert.deepEqual(

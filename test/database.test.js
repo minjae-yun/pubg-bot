@@ -119,6 +119,39 @@ test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   repository.close();
 });
 
+test("최근 두 파티에서 선정된 미션 키를 다시 뽑지 않도록 조회한다", () => {
+  const repository = createRepository(":memory:");
+  const historicalMissions = [
+    { key: "team-12-kills", scope: "team", rewardPoints: 100 },
+    { key: "personal-7-kills", scope: "personal", rewardPoints: 120 },
+    { key: "team-2000-damage", scope: "team", rewardPoints: 90 },
+  ];
+
+  for (let index = 0; index < historicalMissions.length; index += 1) {
+    const { session } = repository.createPartySession({
+      guildId: "guild-1",
+      channelId: `channel-${index}`,
+      ownerUserId: "user-1",
+    });
+    repository.startPartySession(session.id, [historicalMissions[index]]);
+    repository.completePartySession(session.id);
+  }
+
+  const { session: currentSession } = repository.createPartySession({
+    guildId: "guild-1",
+    channelId: "channel-current",
+    ownerUserId: "user-1",
+  });
+  const recentKeys = repository.getRecentPartyMissionKeys(
+    "guild-1",
+    currentSession.id,
+    2,
+  );
+
+  assert.deepEqual(recentKeys, ["personal-7-kills", "team-2000-damage"]);
+  repository.close();
+});
+
 test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전한다", () => {
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "pubg-bot-migration-"));
   const databasePath = join(temporaryDirectory, "legacy.sqlite");

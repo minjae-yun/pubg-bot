@@ -337,7 +337,14 @@ async function handlePartyButton(interaction, pubgApi, repository) {
     }
 
     await assertPartyOwner(interaction, session, "출발");
-    const selectedMissions = selectPartyMissions();
+    const recentlySelectedMissionKeys = repository.getRecentPartyMissionKeys(
+      session.guildId,
+      session.id,
+      2,
+    );
+    const selectedMissions = selectPartyMissions({
+      excludedKeys: recentlySelectedMissionKeys,
+    });
     const startedSession = repository.startPartySession(session.id, selectedMissions);
 
     if (!startedSession) {
@@ -484,13 +491,21 @@ async function finishParty(interaction, session, pubgApi, repository) {
 
     return {
       ...partyMatch,
-      players: partyMatch.players.map((player) => ({
-        ...player,
-        friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
-        squadBreakerCount:
-          killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,
-        killEvents: killAnalysis.killsByPlayer.get(player.accountId) ?? [],
-      })),
+      players: partyMatch.players.map((player) => {
+        const telemetry = killAnalysis.playerTelemetry.get(player.accountId);
+        return {
+          ...player,
+          friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
+          squadBreakerCount:
+            killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,
+          killEvents: killAnalysis.killsByPlayer.get(player.accountId) ?? [],
+          firstFirearmKey: telemetry?.firstFirearmKey,
+          carePackageWeaponKeys: [
+            ...(telemetry?.carePackageWeaponKeys ?? []),
+          ],
+          flareGunUses: telemetry?.flareGunUses ?? 0,
+        };
+      }),
     };
   });
   const report = buildPartyReport(partyMatches, registeredMembers);

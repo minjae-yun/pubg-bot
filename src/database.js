@@ -409,6 +409,33 @@ export class BotRepository {
       .all(sessionId);
   }
 
+  getRecentPartyMissionKeys(guildId, excludedSessionId, partyCount = 2) {
+    return this.database
+      .prepare(`
+        WITH recent_sessions AS (
+          SELECT id
+          FROM party_sessions AS sessions
+          WHERE sessions.guild_id = ?
+            AND sessions.id <> ?
+            AND EXISTS (
+              SELECT 1
+              FROM party_missions AS missions
+              WHERE missions.session_id = sessions.id
+            )
+          ORDER BY
+            COALESCE(sessions.started_at, sessions.created_at) DESC,
+            sessions.id DESC
+          LIMIT ?
+        )
+        SELECT DISTINCT missions.mission_key AS key
+        FROM party_missions AS missions
+        JOIN recent_sessions ON recent_sessions.id = missions.session_id
+        ORDER BY missions.mission_key ASC
+      `)
+      .all(guildId, excludedSessionId, partyCount)
+      .map((mission) => mission.key);
+  }
+
   recordMissionCompletions(sessionId, completions) {
     if (completions.length === 0) {
       return 0;
