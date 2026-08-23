@@ -1,7 +1,14 @@
 const KILL_EVENT_TYPES = new Set(["LogPlayerKill", "LogPlayerKillV2"]);
 
 export function countSameSquadKills(events, accountIds) {
+  return analyzeTrackedKills(events, accountIds).sameSquadKills;
+}
+
+export function analyzeTrackedKills(events, accountIds) {
   const trackedAccounts = new Set(accountIds.filter(Boolean));
+  const killsByPlayer = new Map(
+    [...trackedAccounts].map((accountId) => [accountId, []]),
+  );
   const victimsByKillerAndTeam = new Map(
     [...trackedAccounts].map((accountId) => [accountId, new Map()]),
   );
@@ -29,6 +36,18 @@ export function countSameSquadKills(events, accountIds) {
       continue;
     }
 
+    const damageInfo = resolveKillerDamageInfo(event, killerAccountId);
+    killsByPlayer.get(killerAccountId).push({
+      killerAccountId,
+      victimAccountId,
+      killerTeamId,
+      victimTeamId,
+      damageCauserName: damageInfo?.damageCauserName ?? event.damageCauserName,
+      damageTypeCategory:
+        damageInfo?.damageTypeCategory ?? event.damageTypeCategory,
+      distance: damageInfo?.distance ?? event.distance,
+    });
+
     const victimsByTeam = victimsByKillerAndTeam.get(killerAccountId);
     const teamKey = String(victimTeamId);
     const victims = victimsByTeam.get(teamKey) ?? new Set();
@@ -36,7 +55,7 @@ export function countSameSquadKills(events, accountIds) {
     victimsByTeam.set(teamKey, victims);
   }
 
-  return new Map(
+  const sameSquadKills = new Map(
     [...victimsByKillerAndTeam].map(([accountId, victimsByTeam]) => {
       const bestTeam = [...victimsByTeam.entries()].reduce(
         (best, [enemyTeamId, victims]) => {
@@ -58,5 +77,32 @@ export function countSameSquadKills(events, accountIds) {
         bestTeam ?? { count: 0, enemyTeamId: undefined, victimAccountIds: [] },
       ];
     }),
+  );
+
+  return { killsByPlayer, sameSquadKills };
+}
+
+function resolveKillerDamageInfo(event, killerAccountId) {
+  if (event?._T === "LogPlayerKill") {
+    return event;
+  }
+
+  const candidates = [];
+
+  if (event.dBNOMaker?.accountId === killerAccountId) {
+    candidates.push(event.dBNODamageInfo);
+  }
+
+  if (event.finisher?.accountId === killerAccountId) {
+    candidates.push(event.finishDamageInfo);
+  }
+
+  candidates.push(event.killerDamageInfo);
+
+  return (
+    candidates.find(
+      (damageInfo) =>
+        damageInfo?.damageCauserName && damageInfo.damageCauserName !== "None",
+    ) ?? candidates.find(Boolean)
   );
 }

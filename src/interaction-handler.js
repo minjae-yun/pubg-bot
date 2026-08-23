@@ -26,7 +26,12 @@ import { PubgApiError } from "./pubg-api.js";
 import { extractRecentPlayerMatch } from "./recent-stats.js";
 import { buildRecentStatsEmbed } from "./recent-stats-embed.js";
 import { buildStatsEmbed } from "./stats-embed.js";
-import { countSameSquadKills } from "./squad-kills.js";
+import {
+  buildMissionReport,
+  evaluatePartyMissions,
+  selectPartyMissions,
+} from "./missions.js";
+import { analyzeTrackedKills } from "./squad-kills.js";
 
 const MAX_PARTY_MEMBERS = 10;
 
@@ -332,7 +337,8 @@ async function handlePartyButton(interaction, pubgApi, repository) {
     }
 
     await assertPartyOwner(interaction, session, "출발");
-    const startedSession = repository.startPartySession(session.id);
+    const selectedMissions = selectPartyMissions();
+    const startedSession = repository.startPartySession(session.id, selectedMissions);
 
     if (!startedSession) {
       await interaction.reply({
@@ -343,8 +349,9 @@ async function handlePartyButton(interaction, pubgApi, repository) {
     }
 
     const members = repository.getPartyMembers(session.id);
+    const missions = repository.getPartyMissions(session.id);
     await interaction.update({
-      embeds: [buildPartyActiveEmbed(startedSession, members)],
+      embeds: [buildPartyActiveEmbed(startedSession, members, missions)],
       components: [buildPartyButtons(session.id, startedSession.status)],
     });
     return;
@@ -473,18 +480,39 @@ async function finishParty(interaction, session, pubgApi, repository) {
   );
   const partyMatches = selectedMatches.map(({ partyMatch }, index) => {
     const friendlyKnocks = countFriendlyKnocks(telemetries[index], accountIds);
-    const squadKills = countSameSquadKills(telemetries[index], accountIds);
+    const killAnalysis = analyzeTrackedKills(telemetries[index], accountIds);
 
     return {
       ...partyMatch,
       players: partyMatch.players.map((player) => ({
         ...player,
         friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
-        squadBreakerCount: squadKills.get(player.accountId)?.count ?? 0,
+        squadBreakerCount:
+          killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,
+        killEvents: killAnalysis.killsByPlayer.get(player.accountId) ?? [],
       })),
     };
   });
   const report = buildPartyReport(partyMatches, registeredMembers);
+  const selectedMissions = repository.getPartyMissions(session.id);
+  const completionCandidates = evaluatePartyMissions(
+    selectedMissions,
+    partyMatches,
+  );
+  repository.recordMissionCompletions(session.id, completionCandidates);
+  const missionReport = buildMissionReport(
+    selectedMissions,
+    repository.getMissionCompletions(session.id),
+    registeredMembers,
+  );
+  const missionPointsByUser = new Map(
+    missionReport.ranking.map((player) => [player.discordUserId, player.points]),
+  );
+  for (const player of report.players) {
+    player.missionPoints = missionPointsByUser.get(player.discordUserId) ?? 0;
+  }
+  report.missionReport = missionReport;
+  report.awards.missionLeaders = missionReport.leaders;
   repository.completePartySession(session.id);
   await interaction.editReply({ embeds: [buildPartyReportEmbed(report, session)] });
 }

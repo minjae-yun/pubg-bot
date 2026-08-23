@@ -39,9 +39,59 @@ test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   assert.equal(repository.addPartyMember(session.id, "user-2"), true);
   assert.equal(repository.addPartyMember(session.id, "user-2"), false);
   assert.equal(repository.getPartyMembers(session.id).length, 2);
-  const startedSession = repository.startPartySession(session.id);
+  const startedSession = repository.startPartySession(session.id, [
+    {
+      key: "team-12-kills",
+      scope: "team",
+      rewardPoints: 100,
+    },
+    {
+      key: "personal-7-kills",
+      scope: "personal",
+      rewardPoints: 120,
+    },
+  ]);
   assert.equal(startedSession.status, "active");
   assert.ok(startedSession.startedAt);
+  assert.deepEqual(
+    repository.getPartyMissions(session.id).map((mission) => mission.key),
+    ["personal-7-kills", "team-12-kills"],
+  );
+  assert.equal(
+    repository.recordMissionCompletions(session.id, [
+      {
+        missionKey: "personal-7-kills",
+        discordUserId: "user-1",
+        matchId: "match-1",
+      },
+    ]),
+    1,
+  );
+  assert.equal(
+    repository.recordMissionCompletions(session.id, [
+      {
+        missionKey: "personal-7-kills",
+        discordUserId: "user-1",
+        matchId: "match-2",
+      },
+      {
+        missionKey: "personal-7-kills",
+        discordUserId: "user-2",
+        matchId: "match-2",
+      },
+    ]),
+    1,
+  );
+  assert.deepEqual(
+    repository.getMissionCompletions(session.id).map((completion) => ({
+      user: completion.discordUserId,
+      match: completion.matchId,
+    })),
+    [
+      { user: "user-1", match: "match-1" },
+      { user: "user-2", match: "match-2" },
+    ],
+  );
   assert.equal(repository.startPartySession(session.id), undefined);
   assert.equal(repository.addPartyMember(session.id, "user-3"), false);
   assert.equal(repository.completePartySession(session.id), true);

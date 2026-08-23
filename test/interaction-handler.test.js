@@ -70,6 +70,7 @@ test("파티 취소 버튼은 기존 로비의 버튼을 제거한다", async ()
 test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으로 바꾼다", async () => {
   const updates = [];
   let startedSessionId;
+  let selectedMissions = [];
   const repository = {
     getPartySession() {
       return {
@@ -82,8 +83,9 @@ test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으�
         status: "recruiting",
       };
     },
-    startPartySession(sessionId) {
+    startPartySession(sessionId, missions) {
       startedSessionId = sessionId;
+      selectedMissions = missions;
       return {
         id: sessionId,
         guildId: "guild-1",
@@ -100,6 +102,9 @@ test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으�
         { discordUserId: "member-1" },
       ];
     },
+    getPartyMissions() {
+      return selectedMissions;
+    },
   };
   const handler = createInteractionHandler({ pubgApi: {}, repository });
   const interaction = {
@@ -113,6 +118,12 @@ test("파티장이 출발하면 참가자 명단을 잠그고 출발 화면으�
   await handler(interaction);
 
   assert.equal(startedSessionId, 12);
+  assert.equal(selectedMissions.length, 6);
+  assert.equal(selectedMissions.filter((mission) => mission.scope === "team").length, 2);
+  assert.equal(
+    selectedMissions.filter((mission) => mission.scope === "personal").length,
+    4,
+  );
   assert.equal(updates.length, 1);
   assert.deepEqual(
     updates[0].components[0].toJSON().components.map((button) => button.custom_id),

@@ -47,12 +47,10 @@ export function extractPartyMatch(match, members, startedAt, endedAt = new Date(
         assists: safeNumber(stats.assists),
         revives: safeNumber(stats.revives),
         headshotKills: safeNumber(stats.headshotKills),
+        longestKill: safeNumber(stats.longestKill),
         friendlyKills: safeNumber(stats.teamKills),
         friendlyKnocks: 0,
-        deaths:
-          stats.deathType === "alive" || safeNumber(stats.winPlace) === 1
-            ? 0
-            : 1,
+        deaths: stats.deathType === "alive" ? 0 : 1,
         placement: safeNumber(stats.winPlace),
         survivalSeconds: safeNumber(stats.timeSurvived),
       };

@@ -351,16 +351,113 @@ export class BotRepository {
     return result.changes > 0;
   }
 
-  startPartySession(sessionId) {
-    const result = this.database
-      .prepare(`
-        UPDATE party_sessions
-        SET status = 'active', started_at = ?
-        WHERE id = ? AND status = 'recruiting'
-      `)
-      .run(new Date().toISOString(), sessionId);
+  startPartySession(sessionId, missions = []) {
+    const now = new Date().toISOString();
+    this.database.exec("BEGIN IMMEDIATE;");
 
-    return result.changes > 0 ? this.getPartySession(sessionId) : undefined;
+    try {
+      const result = this.database
+        .prepare(`
+          UPDATE party_sessions
+          SET status = 'active', started_at = ?
+          WHERE id = ? AND status = 'recruiting'
+        `)
+        .run(now, sessionId);
+
+      if (result.changes === 0) {
+        this.database.exec("ROLLBACK;");
+        return undefined;
+      }
+
+      const insertMission = this.database.prepare(`
+        INSERT INTO party_missions (
+          session_id, mission_key, scope, reward_points, selected_at
+        ) VALUES (?, ?, ?, ?, ?)
+      `);
+
+      for (const mission of missions) {
+        insertMission.run(
+          sessionId,
+          mission.key,
+          mission.scope,
+          mission.rewardPoints,
+          now,
+        );
+      }
+
+      this.database.exec("COMMIT;");
+      return this.getPartySession(sessionId);
+    } catch (error) {
+      this.database.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  getPartyMissions(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT
+          session_id AS sessionId,
+          mission_key AS key,
+          scope,
+          reward_points AS rewardPoints,
+          selected_at AS selectedAt
+        FROM party_missions
+        WHERE session_id = ?
+        ORDER BY selected_at ASC, mission_key ASC
+      `)
+      .all(sessionId);
+  }
+
+  recordMissionCompletions(sessionId, completions) {
+    if (completions.length === 0) {
+      return 0;
+    }
+
+    const completedAt = new Date().toISOString();
+    let inserted = 0;
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      const insertCompletion = this.database.prepare(`
+        INSERT OR IGNORE INTO mission_completions (
+          session_id, mission_key, discord_user_id, match_id, completed_at
+        ) VALUES (?, ?, ?, ?, ?)
+      `);
+
+      for (const completion of completions) {
+        const result = insertCompletion.run(
+          sessionId,
+          completion.missionKey,
+          completion.discordUserId,
+          completion.matchId,
+          completedAt,
+        );
+        inserted += result.changes;
+      }
+
+      this.database.exec("COMMIT;");
+      return inserted;
+    } catch (error) {
+      this.database.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  getMissionCompletions(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT
+          session_id AS sessionId,
+          mission_key AS missionKey,
+          discord_user_id AS discordUserId,
+          match_id AS matchId,
+          completed_at AS completedAt
+        FROM mission_completions
+        WHERE session_id = ?
+        ORDER BY completed_at ASC, mission_key ASC, discord_user_id ASC
+      `)
+      .all(sessionId);
   }
 
   getPartyMembers(sessionId) {

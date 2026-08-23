@@ -239,6 +239,41 @@ test("파티 시작 전 매치는 제외한다", () => {
   );
 });
 
+test("치킨을 먹어도 먼저 사망한 파티원은 사망으로 기록한다", () => {
+  const match = {
+    data: {
+      id: "match-win",
+      attributes: {
+        createdAt: "2026-07-23T12:10:00.000Z",
+        gameMode: "squad-fpp",
+      },
+    },
+    included: [
+      {
+        type: "participant",
+        attributes: {
+          stats: {
+            playerId: "account-1",
+            name: "PlayerOne",
+            deathType: "byplayer",
+            winPlace: 1,
+          },
+        },
+      },
+    ],
+  };
+
+  const extracted = extractPartyMatch(
+    match,
+    members,
+    "2026-07-23T12:00:00.000Z",
+    new Date("2026-07-23T13:00:00.000Z"),
+  );
+
+  assert.equal(extracted.players[0].placement, 1);
+  assert.equal(extracted.players[0].deaths, 1);
+});
+
 function partyPlayer(
   discordUserId,
   {

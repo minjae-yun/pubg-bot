@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
 } from "discord.js";
+import { getMissionDefinition } from "./missions.js";
 
 const integerFormatter = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
@@ -41,11 +42,24 @@ export function buildPartyLobbyEmbed(session, members) {
     .setFooter({ text: "참가하려면 먼저 /등록 닉네임을 실행해야 합니다." });
 }
 
-export function buildPartyActiveEmbed(session, members) {
+export function buildPartyActiveEmbed(session, members, missions = []) {
   const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
   const memberList = members.map((member) => `<@${member.discordUserId}>`).join("\n");
+  const missionLines = [...missions]
+    .sort((left, right) => {
+      if (left.scope !== right.scope) {
+        return left.scope === "team" ? -1 : 1;
+      }
 
-  return new EmbedBuilder()
+      return left.key.localeCompare(right.key);
+    })
+    .map((mission) => {
+      const definition = getMissionDefinition(mission.key);
+      const scope = mission.scope === "team" ? "TEAM" : "PERSONAL";
+      return `**${scope} · ${definition?.name ?? mission.key}** · ${mission.rewardPoints}P\n${definition?.description ?? mission.key}`;
+    });
+
+  const embed = new EmbedBuilder()
     .setColor(0xb7a36a)
     .setTitle("스쿼드 파티가 출발했습니다")
     .setDescription(
@@ -68,6 +82,16 @@ export function buildPartyActiveEmbed(session, members) {
         inline: false,
       },
     );
+
+  if (missionLines.length > 0) {
+    embed.addFields({
+      name: "이번 파티 미션",
+      value: missionLines.join("\n\n"),
+      inline: false,
+    });
+  }
+
+  return embed;
 }
 
 export function buildPartyButtons(sessionId, status = "recruiting") {
@@ -111,6 +135,10 @@ export function buildPartyReportEmbed(report, session) {
     .map((player) => `<@${player.discordUserId}>`)
     .join(" · ");
   const squadBreakerCount = awards.squadBreaker[0]?.squadBreakerCount ?? 0;
+  const missionLeaderNames = (awards.missionLeaders ?? [])
+    .map((player) => `<@${player.discordUserId}>`)
+    .join(" · ");
+  const missionLeaderPoints = awards.missionLeaders?.[0]?.points ?? 0;
   const trollWinners = awards.trolls
     .map(
       (player) =>
@@ -129,20 +157,32 @@ export function buildPartyReportEmbed(report, session) {
         `(한 경기에서 동일 적 스쿼드 ${squadBreakerCount}명 처치)`
       : null,
     `**오늘의 씹쓰레기** ${trollWinners}`,
+    missionLeaderNames
+      ? `**미션 포인트 1위** ${missionLeaderNames} (${missionLeaderPoints}P)`
+      : null,
   ].filter(Boolean);
   const playerLines = report.players.map(
     (player) =>
       `<@${player.discordUserId}> · ${player.matches}경기 · ${integerFormatter.format(player.kills)}킬 · ` +
       `KDA ${formatRatio(player.kda)} · 평균딜 ${integerFormatter.format(player.averageDamage)} · ` +
       `${player.contributionRatio.toFixed(2)}인분` +
+      ` · 미션 ${player.missionPoints ?? 0}P` +
       (player.friendlyKnocks > 0
         ? ` · 아군 기절 ${player.friendlyKnocks}회`
         : "") +
       (player.friendlyKills > 0 ? ` · 팀킬 ${player.friendlyKills}회` : ""),
   );
   const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const missionLines = (report.missionReport?.missions ?? []).map((mission) => {
+    const winners = mission.completedBy
+      .map((discordUserId) => `<@${discordUserId}>`)
+      .join(" · ");
+    return winners
+      ? `**완료 · ${mission.name}** · ${mission.rewardPoints}P · ${winners}`
+      : `미완료 · ${mission.name} · ${mission.rewardPoints}P`;
+  });
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(0x57f287)
     .setTitle("🍗 오늘의 스쿼드 결산")
     .setDescription(awardLines.join("\n"))
@@ -168,6 +208,16 @@ export function buildPartyReportEmbed(report, session) {
     })
     .setTimestamp()
     .setAuthor({ name: `파티 시작: ${new Date(startedTimestamp * 1_000).toLocaleString("ko-KR")}` });
+
+  if (missionLines.length > 0) {
+    embed.addFields({
+      name: "미션 결과",
+      value: missionLines.join("\n"),
+      inline: false,
+    });
+  }
+
+  return embed;
 }
 
 function formatRatio(value) {

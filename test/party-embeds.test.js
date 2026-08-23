@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ButtonStyle } from "discord.js";
 import {
+  buildPartyActiveEmbed,
   buildPartyButtons,
   buildPartyReportEmbed,
 } from "../src/party-embeds.js";
@@ -26,6 +27,32 @@ test("파티 출발 후에는 결산과 취소 버튼만 제공한다", () => {
   );
 });
 
+test("파티 출발 화면에 선정된 미션과 점수를 공개한다", () => {
+  const embed = buildPartyActiveEmbed(
+    {
+      ownerUserId: "user-1",
+      startedAt: "2026-08-23T00:00:00.000Z",
+    },
+    [{ discordUserId: "user-1" }],
+    [
+      {
+        key: "team-12-kills",
+        scope: "team",
+        rewardPoints: 100,
+      },
+      {
+        key: "personal-7-kills",
+        scope: "personal",
+        rewardPoints: 120,
+      },
+    ],
+  ).toJSON();
+
+  assert.match(embed.fields.at(-1).value, /TEAM · 팀 12킬/);
+  assert.match(embed.fields.at(-1).value, /PERSONAL · 개인 7킬/);
+  assert.match(embed.fields.at(-1).value, /120P/);
+});
+
 test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
   const ace = {
     discordUserId: "user-1",
@@ -45,6 +72,7 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
         kills: 7,
         kda: 4,
         contributionRatio: 1.2,
+        missionPoints: 120,
         friendlyKnocks: 0,
         friendlyKills: 0,
       },
@@ -55,10 +83,27 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
         { discordUserId: "user-1", squadBreakerCount: 3 },
         { discordUserId: "user-2", squadBreakerCount: 3 },
       ],
+      missionLeaders: [
+        { discordUserId: "user-1", points: 120 },
+      ],
       trolls: [
         {
           discordUserId: "user-1",
           trollReasons: ["아군 기절 1회"],
+        },
+      ],
+    },
+    missionReport: {
+      missions: [
+        {
+          name: "개인 7킬",
+          rewardPoints: 120,
+          completedBy: ["user-1"],
+        },
+        {
+          name: "박격포 킬",
+          rewardPoints: 180,
+          completedBy: [],
         },
       ],
     },
@@ -72,5 +117,8 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
   assert.match(embed.description, /<@user-1> · <@user-2>/);
   assert.match(embed.description, /동일 적 스쿼드 3명 처치/);
   assert.match(embed.description, /오늘의 씹쓰레기/);
+  assert.match(embed.description, /미션 포인트 1위/);
   assert.doesNotMatch(embed.description, /킬왕|딜왕/);
+  assert.match(embed.fields.at(-1).value, /완료 · 개인 7킬/);
+  assert.match(embed.fields.at(-1).value, /미완료 · 박격포 킬/);
 });
