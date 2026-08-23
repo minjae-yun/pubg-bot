@@ -129,7 +129,32 @@ export function buildPartyButtons(sessionId, status = "recruiting") {
   return new ActionRowBuilder().addComponents(buttons);
 }
 
-export function buildPartyReportEmbed(report, session) {
+export function buildPartyReviewButtons(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`party:refresh:${sessionId}`)
+      .setLabel("새로고침")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`party:missions:${sessionId}`)
+      .setLabel("미션 전체보기")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`party:ranking:${sessionId}`)
+      .setLabel("팀원 순위")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`party:confirm:${sessionId}`)
+      .setLabel("결산 확정")
+      .setStyle(ButtonStyle.Success),
+  );
+}
+
+export function buildPartyReportEmbed(
+  report,
+  session,
+  { reviewing = false, refreshedAt } = {},
+) {
   const awards = report.awards;
   const squadBreakerWinners = awards.squadBreaker
     .map((player) => `<@${player.discordUserId}>`)
@@ -183,9 +208,17 @@ export function buildPartyReportEmbed(report, session) {
   });
 
   const embed = new EmbedBuilder()
-    .setColor(0x57f287)
-    .setTitle("🍗 오늘의 스쿼드 결산")
-    .setDescription(awardLines.join("\n"))
+    .setColor(reviewing ? 0xfee75c : 0x57f287)
+    .setTitle(reviewing ? "스쿼드 결산 검토" : "🍗 오늘의 스쿼드 결산")
+    .setDescription(
+      reviewing
+        ? [
+            "아직 확정되지 않은 결산입니다. 마지막 경기가 빠졌다면 잠시 후 **새로고침**해 주세요.",
+            "",
+            ...awardLines,
+          ].join("\n")
+        : awardLines.join("\n"),
+    )
     .addFields(
       {
         name: "팀 기록",
@@ -204,9 +237,11 @@ export function buildPartyReportEmbed(report, session) {
       },
     )
     .setFooter({
-      text: "ACE는 평균 딜 + 평균 킬×100 + 평균 도움×50 기준입니다.",
+      text: reviewing
+        ? "마지막 경기 반영 여부를 확인한 뒤 결산을 확정하세요."
+        : "ACE는 평균 딜 + 평균 킬×100 + 평균 도움×50 기준입니다.",
     })
-    .setTimestamp()
+    .setTimestamp(refreshedAt ? new Date(refreshedAt) : new Date())
     .setAuthor({ name: `파티 시작: ${new Date(startedTimestamp * 1_000).toLocaleString("ko-KR")}` });
 
   if (missionLines.length > 0) {
@@ -218,6 +253,64 @@ export function buildPartyReportEmbed(report, session) {
   }
 
   return embed;
+}
+
+export function buildMissionDetailEmbed(report) {
+  const missions = report.missionReport?.missions ?? [];
+  const embed = new EmbedBuilder()
+    .setColor(0xb7a36a)
+    .setTitle("이번 파티 미션 전체보기")
+    .setDescription(
+      "각 미션은 이번 파티에서 한 사람당 한 번만 보상됩니다.",
+    );
+
+  for (const scope of ["team", "personal"]) {
+    const lines = missions
+      .filter((mission) => mission.scope === scope)
+      .map((mission) => {
+        const winners = mission.completedBy
+          .map((discordUserId) => `<@${discordUserId}>`)
+          .join(" · ");
+        const result = winners ? `완료 · ${winners}` : "미완료";
+        return [
+          `**${mission.name} · ${mission.rewardPoints}P**`,
+          mission.description,
+          result,
+        ].join("\n");
+      });
+
+    if (lines.length > 0) {
+      embed.addFields({
+        name: scope === "team" ? "TEAM" : "PERSONAL",
+        value: lines.join("\n\n"),
+        inline: false,
+      });
+    }
+  }
+
+  return embed;
+}
+
+export function buildRankingDetailEmbed(report) {
+  const players = [...report.players].sort(
+    (left, right) =>
+      (right.missionPoints ?? 0) - (left.missionPoints ?? 0) ||
+      (right.contributionScore ?? 0) - (left.contributionScore ?? 0) ||
+      left.discordUserId.localeCompare(right.discordUserId),
+  );
+  const lines = players.map(
+    (player, index) =>
+      `**${index + 1}위** <@${player.discordUserId}> · ` +
+      `미션 ${player.missionPoints ?? 0}P · ` +
+      `${integerFormatter.format(player.kills)}킬 · ` +
+      `평균딜 ${integerFormatter.format(player.averageDamage)}`,
+  );
+
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle("팀원 순위")
+    .setDescription(lines.join("\n") || "표시할 팀원 기록이 없습니다.")
+    .setFooter({ text: "미션 포인트 우선, 동점이면 ACE 기여도 순입니다." });
 }
 
 function formatRatio(value) {

@@ -487,6 +487,53 @@ export class BotRepository {
       .all(sessionId);
   }
 
+  savePartyReview(
+    sessionId,
+    { snapshot, syncedMatchCount, lastSyncedMatchAt },
+  ) {
+    const reviewedAt = new Date().toISOString();
+    const result = this.database
+      .prepare(`
+        UPDATE party_sessions
+        SET
+          status = 'reviewing',
+          reviewed_at = ?,
+          last_synced_match_at = ?,
+          synced_match_count = ?,
+          review_snapshot_json = ?
+        WHERE id = ? AND status IN ('active', 'reviewing')
+      `)
+      .run(
+        reviewedAt,
+        lastSyncedMatchAt,
+        syncedMatchCount,
+        JSON.stringify(snapshot),
+        sessionId,
+      );
+
+    return result.changes > 0 ? this.getPartySession(sessionId) : undefined;
+  }
+
+  getPartyReviewSnapshot(sessionId) {
+    const row = this.database
+      .prepare(`
+        SELECT review_snapshot_json AS snapshotJson
+        FROM party_sessions
+        WHERE id = ?
+      `)
+      .get(sessionId);
+
+    if (!row?.snapshotJson) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(row.snapshotJson);
+    } catch {
+      return undefined;
+    }
+  }
+
   getPartyMembers(sessionId) {
     return this.database
       .prepare(`
@@ -513,6 +560,18 @@ export class BotRepository {
         UPDATE party_sessions
         SET status = 'completed', ended_at = ?
         WHERE id = ? AND status IN ('recruiting', 'active', 'reviewing')
+      `)
+      .run(new Date().toISOString(), sessionId);
+
+    return result.changes > 0;
+  }
+
+  confirmPartySession(sessionId) {
+    const result = this.database
+      .prepare(`
+        UPDATE party_sessions
+        SET status = 'completed', ended_at = ?
+        WHERE id = ? AND status = 'reviewing'
       `)
       .run(new Date().toISOString(), sessionId);
 

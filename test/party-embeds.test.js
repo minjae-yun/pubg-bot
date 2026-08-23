@@ -2,9 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ButtonStyle } from "discord.js";
 import {
+  buildMissionDetailEmbed,
   buildPartyActiveEmbed,
   buildPartyButtons,
   buildPartyReportEmbed,
+  buildPartyReviewButtons,
+  buildRankingDetailEmbed,
 } from "../src/party-embeds.js";
 
 test("파티 모집 중에는 참가, 출발, 취소 버튼을 제공한다", () => {
@@ -25,6 +28,22 @@ test("파티 출발 후에는 결산과 취소 버튼만 제공한다", () => {
     row.components.map((button) => button.custom_id),
     ["party:summary:42", "party:cancel:42"],
   );
+});
+
+test("결산 검토 화면에는 새로고침, 상세보기, 확정 버튼을 제공한다", () => {
+  const row = buildPartyReviewButtons(42).toJSON();
+
+  assert.deepEqual(
+    row.components.map((button) => button.custom_id),
+    [
+      "party:refresh:42",
+      "party:missions:42",
+      "party:ranking:42",
+      "party:confirm:42",
+    ],
+  );
+  assert.equal(row.components[0].style, ButtonStyle.Primary);
+  assert.equal(row.components[3].style, ButtonStyle.Success);
 });
 
 test("파티 출발 화면에 선정된 미션과 점수를 공개한다", () => {
@@ -97,11 +116,15 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
       missions: [
         {
           name: "개인 7킬",
+          description: "한 경기에서 개인 7킬 이상",
+          scope: "personal",
           rewardPoints: 120,
           completedBy: ["user-1"],
         },
         {
           name: "박격포 킬",
+          description: "박격포로 적 처치",
+          scope: "personal",
           rewardPoints: 180,
           completedBy: [],
         },
@@ -121,4 +144,24 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
   assert.doesNotMatch(embed.description, /킬왕|딜왕/);
   assert.match(embed.fields.at(-1).value, /완료 · 개인 7킬/);
   assert.match(embed.fields.at(-1).value, /미완료 · 박격포 킬/);
+
+  const reviewEmbed = buildPartyReportEmbed(
+    report,
+    { startedAt: "2026-08-23T00:00:00.000Z" },
+    {
+      reviewing: true,
+      refreshedAt: "2026-08-23T01:00:00.000Z",
+    },
+  ).toJSON();
+  assert.equal(reviewEmbed.title, "스쿼드 결산 검토");
+  assert.match(reviewEmbed.description, /아직 확정되지 않은 결산/);
+  assert.match(reviewEmbed.footer.text, /결산을 확정/);
+
+  const missionEmbed = buildMissionDetailEmbed(report).toJSON();
+  assert.match(missionEmbed.fields[0].value, /개인 7킬 · 120P/);
+  assert.match(missionEmbed.fields[0].value, /완료 · <@user-1>/);
+  assert.match(missionEmbed.fields[0].value, /박격포 킬 · 180P/);
+
+  const rankingEmbed = buildRankingDetailEmbed(report).toJSON();
+  assert.match(rankingEmbed.description, /1위.*<@user-1>.*미션 120P/);
 });

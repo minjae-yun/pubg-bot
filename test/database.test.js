@@ -152,6 +152,67 @@ test("최근 두 파티에서 선정된 미션 키를 다시 뽑지 않도록 �
   repository.close();
 });
 
+test("결산 초안을 새로고침하고 확정할 때만 파티를 종료한다", () => {
+  const repository = createRepository(":memory:");
+  const { session } = repository.createPartySession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: "user-1",
+  });
+  repository.startPartySession(session.id);
+
+  const firstReview = repository.savePartyReview(session.id, {
+    snapshot: {
+      version: 1,
+      generatedAt: "2026-08-23T01:00:00.000Z",
+      report: { matches: 1 },
+    },
+    syncedMatchCount: 1,
+    lastSyncedMatchAt: "2026-08-23T00:30:00.000Z",
+  });
+
+  assert.equal(firstReview.status, "reviewing");
+  assert.ok(firstReview.reviewedAt);
+  assert.equal(firstReview.syncedMatchCount, 1);
+  assert.equal(firstReview.lastSyncedMatchAt, "2026-08-23T00:30:00.000Z");
+  assert.equal(repository.getPartyReviewSnapshot(session.id).report.matches, 1);
+  assert.equal(
+    repository.createPartySession({
+      guildId: "guild-1",
+      channelId: "channel-1",
+      ownerUserId: "user-1",
+    }).created,
+    false,
+  );
+
+  const refreshedReview = repository.savePartyReview(session.id, {
+    snapshot: {
+      version: 1,
+      generatedAt: "2026-08-23T01:02:00.000Z",
+      report: { matches: 2 },
+    },
+    syncedMatchCount: 2,
+    lastSyncedMatchAt: "2026-08-23T00:55:00.000Z",
+  });
+
+  assert.equal(refreshedReview.status, "reviewing");
+  assert.equal(refreshedReview.syncedMatchCount, 2);
+  assert.equal(repository.getPartyReviewSnapshot(session.id).report.matches, 2);
+  assert.equal(repository.confirmPartySession(session.id), true);
+  assert.equal(repository.getPartySession(session.id).status, "completed");
+  assert.equal(repository.confirmPartySession(session.id), false);
+  assert.equal(
+    repository.savePartyReview(session.id, {
+      snapshot: { report: { matches: 3 } },
+      syncedMatchCount: 3,
+      lastSyncedMatchAt: "2026-08-23T01:05:00.000Z",
+    }),
+    undefined,
+  );
+
+  repository.close();
+});
+
 test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전한다", () => {
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "pubg-bot-migration-"));
   const databasePath = join(temporaryDirectory, "legacy.sqlite");
