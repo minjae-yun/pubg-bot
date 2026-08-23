@@ -244,10 +244,10 @@ export class BotRepository {
       const result = this.database
         .prepare(`
           INSERT INTO party_sessions (
-            guild_id, channel_id, owner_user_id, created_at, started_at, status
-          ) VALUES (?, ?, ?, ?, ?, 'active')
+            guild_id, channel_id, owner_user_id, created_at, status
+          ) VALUES (?, ?, ?, ?, 'recruiting')
         `)
-        .run(guildId, channelId, ownerUserId, now, now);
+        .run(guildId, channelId, ownerUserId, now);
       const sessionId = Number(result.lastInsertRowid);
 
       this.database
@@ -339,11 +339,28 @@ export class BotRepository {
     const result = this.database
       .prepare(`
         INSERT OR IGNORE INTO party_members (session_id, discord_user_id, joined_at)
-        VALUES (?, ?, ?)
+        SELECT ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1
+          FROM party_sessions
+          WHERE id = ? AND status = 'recruiting'
+        )
       `)
-      .run(sessionId, discordUserId, new Date().toISOString());
+      .run(sessionId, discordUserId, new Date().toISOString(), sessionId);
 
     return result.changes > 0;
+  }
+
+  startPartySession(sessionId) {
+    const result = this.database
+      .prepare(`
+        UPDATE party_sessions
+        SET status = 'active', started_at = ?
+        WHERE id = ? AND status = 'recruiting'
+      `)
+      .run(new Date().toISOString(), sessionId);
+
+    return result.changes > 0 ? this.getPartySession(sessionId) : undefined;
   }
 
   getPartyMembers(sessionId) {

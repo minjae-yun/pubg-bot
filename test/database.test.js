@@ -33,10 +33,17 @@ test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   });
 
   assert.equal(created, true);
+  assert.equal(session.status, "recruiting");
+  assert.equal(session.startedAt, null);
   assert.equal(repository.getPartyMembers(session.id).length, 1);
   assert.equal(repository.addPartyMember(session.id, "user-2"), true);
   assert.equal(repository.addPartyMember(session.id, "user-2"), false);
   assert.equal(repository.getPartyMembers(session.id).length, 2);
+  const startedSession = repository.startPartySession(session.id);
+  assert.equal(startedSession.status, "active");
+  assert.ok(startedSession.startedAt);
+  assert.equal(repository.startPartySession(session.id), undefined);
+  assert.equal(repository.addPartyMember(session.id, "user-3"), false);
   assert.equal(repository.completePartySession(session.id), true);
   assert.equal(repository.getPartySession(session.id).status, "completed");
 

@@ -8,6 +8,7 @@ import {
   statsCommand,
 } from "./commands.js";
 import {
+  buildPartyActiveEmbed,
   buildPartyButtons,
   buildPartyLobbyEmbed,
   buildPartyReportEmbed,
@@ -53,7 +54,9 @@ export function createInteractionHandler({ pubgApi, repository, allowedChannelId
         await handlePartyButton(interaction, pubgApi, repository);
       }
     } catch (error) {
-      console.error("상호작용 처리 실패:", error?.message || error);
+      if (!(error instanceof InteractionAlreadyHandledError)) {
+        console.error("상호작용 처리 실패:", error?.message || error);
+      }
 
       if (interaction.isAutocomplete()) {
         await interaction.respond([]).catch(() => {});
@@ -228,17 +231,33 @@ async function handlePartyStart(interaction, repository) {
   const members = repository.getPartyMembers(session.id);
   await interaction.reply({
     embeds: [buildPartyLobbyEmbed(session, members)],
-    components: [buildPartyButtons(session.id)],
+    components: [buildPartyButtons(session.id, session.status)],
   });
 }
 
 async function handlePartySummaryCommand(interaction, pubgApi, repository) {
   assertGuildInteraction(interaction);
-  const session = repository.getActivePartySession(interaction.guildId, interaction.channelId);
+  const session = repository.getOpenPartySession(interaction.guildId, interaction.channelId);
 
   if (!session) {
     await interaction.reply({
       content: "이 채널에서 진행 중인 파티가 없습니다. 먼저 `/파티시작`을 실행해 주세요.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (session.status === "recruiting") {
+    await interaction.reply({
+      content: "아직 파티원을 모집 중입니다. 파티장이 **파티 출발**을 눌러주세요.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (session.status !== "active") {
+    await interaction.reply({
+      content: "현재 파티의 결산 초안을 확인하고 있습니다.",
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -251,7 +270,7 @@ async function handlePartySummaryCommand(interaction, pubgApi, repository) {
 
 async function handlePartyCancelCommand(interaction, repository) {
   assertGuildInteraction(interaction);
-  const session = repository.getActivePartySession(interaction.guildId, interaction.channelId);
+  const session = repository.getOpenPartySession(interaction.guildId, interaction.channelId);
 
   if (!session) {
     await interaction.reply({
@@ -281,7 +300,7 @@ async function handlePartyButton(interaction, pubgApi, repository) {
   const sessionId = Number(rawSessionId);
   const session = repository.getPartySession(sessionId);
 
-  if (!session || session.status !== "active" || session.guildId !== interaction.guildId) {
+  if (!session || session.status === "completed" || session.guildId !== interaction.guildId) {
     await interaction.reply({
       content: "이미 종료됐거나 존재하지 않는 파티입니다.",
       flags: MessageFlags.Ephemeral,
@@ -290,11 +309,55 @@ async function handlePartyButton(interaction, pubgApi, repository) {
   }
 
   if (action === "join") {
+    if (session.status !== "recruiting") {
+      await interaction.reply({
+        content: "이미 출발한 파티에는 추가로 참가할 수 없습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await handlePartyJoin(interaction, session, repository);
     return;
   }
 
+  if (action === "start") {
+    if (session.status !== "recruiting") {
+      await interaction.reply({
+        content: "이미 출발했거나 결산 중인 파티입니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await assertPartyOwner(interaction, session, "출발");
+    const startedSession = repository.startPartySession(session.id);
+
+    if (!startedSession) {
+      await interaction.reply({
+        content: "이미 다른 요청에서 파티가 출발했습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const members = repository.getPartyMembers(session.id);
+    await interaction.update({
+      embeds: [buildPartyActiveEmbed(startedSession, members)],
+      components: [buildPartyButtons(session.id, startedSession.status)],
+    });
+    return;
+  }
+
   if (action === "summary") {
+    if (session.status !== "active") {
+      await interaction.reply({
+        content: "파티가 출발한 뒤에 결산할 수 있습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await assertPartyOwner(interaction, session);
     await interaction.deferReply();
     await finishParty(interaction, session, pubgApi, repository);
@@ -349,11 +412,22 @@ async function handlePartyJoin(interaction, session, repository) {
     return;
   }
 
-  repository.addPartyMember(session.id, interaction.user.id);
+  if (!repository.addPartyMember(session.id, interaction.user.id)) {
+    const latestSession = repository.getPartySession(session.id);
+    await interaction.reply({
+      content:
+        latestSession?.status === "recruiting"
+          ? "이미 이 파티에 참가하고 있습니다."
+          : "파티가 출발하여 참가자 모집이 마감됐습니다.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const members = repository.getPartyMembers(session.id);
   await interaction.update({
     embeds: [buildPartyLobbyEmbed(session, members)],
-    components: [buildPartyButtons(session.id)],
+    components: [buildPartyButtons(session.id, session.status)],
   });
 }
 

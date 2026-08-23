@@ -10,15 +10,15 @@ const integerFormatter = new Intl.NumberFormat("ko-KR", {
 });
 
 export function buildPartyLobbyEmbed(session, members) {
-  const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const createdTimestamp = Math.floor(new Date(session.createdAt).getTime() / 1_000);
   const memberList = members.map((member) => `<@${member.discordUserId}>`).join("\n");
 
   return new EmbedBuilder()
     .setColor(0xf2a900)
-    .setTitle("🍗 스쿼드 기록을 시작했습니다")
+    .setTitle("스쿼드 파티원을 모집합니다")
     .setDescription(
       "함께 플레이할 멤버는 아래 **파티 참가** 버튼을 눌러주세요. " +
-        "게임이 끝나면 파티장이 **결산하기**를 누르면 됩니다. " +
+        "모두 모이면 파티장이 **파티 출발**을 눌러 참가자 명단을 확정합니다. " +
         "경기 없이 끝낼 때는 **파티 취소**를 눌러주세요.",
     )
     .addFields(
@@ -28,8 +28,8 @@ export function buildPartyLobbyEmbed(session, members) {
         inline: true,
       },
       {
-        name: "시작 시각",
-        value: `<t:${startedTimestamp}:R>`,
+        name: "모집 시작",
+        value: `<t:${createdTimestamp}:R>`,
         inline: true,
       },
       {
@@ -41,24 +41,68 @@ export function buildPartyLobbyEmbed(session, members) {
     .setFooter({ text: "참가하려면 먼저 /등록 닉네임을 실행해야 합니다." });
 }
 
-export function buildPartyButtons(sessionId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`party:join:${sessionId}`)
-      .setLabel("파티 참가")
-      .setEmoji("🙋")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`party:summary:${sessionId}`)
-      .setLabel("결산하기")
-      .setEmoji("📊")
-      .setStyle(ButtonStyle.Success),
+export function buildPartyActiveEmbed(session, members) {
+  const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const memberList = members.map((member) => `<@${member.discordUserId}>`).join("\n");
+
+  return new EmbedBuilder()
+    .setColor(0xb7a36a)
+    .setTitle("스쿼드 파티가 출발했습니다")
+    .setDescription(
+      "참가자 명단이 확정되었습니다. 게임이 끝나면 파티장이 **결산하기**를 눌러주세요.",
+    )
+    .addFields(
+      {
+        name: "파티장",
+        value: `<@${session.ownerUserId}>`,
+        inline: true,
+      },
+      {
+        name: "출발 시각",
+        value: `<t:${startedTimestamp}:R>`,
+        inline: true,
+      },
+      {
+        name: `참가자 ${members.length}명 · 모집 마감`,
+        value: memberList,
+        inline: false,
+      },
+    );
+}
+
+export function buildPartyButtons(sessionId, status = "recruiting") {
+  const buttons = [];
+
+  if (status === "recruiting") {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`party:join:${sessionId}`)
+        .setLabel("파티 참가")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`party:start:${sessionId}`)
+        .setLabel("파티 출발")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  if (status === "active") {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`party:summary:${sessionId}`)
+        .setLabel("결산하기")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  buttons.push(
     new ButtonBuilder()
       .setCustomId(`party:cancel:${sessionId}`)
       .setLabel("파티 취소")
-      .setEmoji("🛑")
       .setStyle(ButtonStyle.Danger),
   );
+
+  return new ActionRowBuilder().addComponents(buttons);
 }
 
 export function buildPartyReportEmbed(report, session) {
