@@ -61,7 +61,18 @@ test("늦게 반영된 마지막 경기를 새로고침으로 추가한 뒤 결�
       return rawMatches.map(() => []);
     },
   };
-  const handler = createInteractionHandler({ pubgApi, repository });
+  const collectedBatches = [];
+  const dataCollector = {
+    async collectPartyMatches(input) {
+      collectedBatches.push(input);
+      return { saved: input.rawMatches.length, skipped: 0 };
+    },
+  };
+  const handler = createInteractionHandler({
+    pubgApi,
+    repository,
+    dataCollector,
+  });
 
   const first = buttonInteraction(`party:summary:${session.id}`);
   await handler(first.interaction);
@@ -70,6 +81,15 @@ test("늦게 반영된 마지막 경기를 새로고침으로 추가한 뒤 결�
   assert.equal(repository.getPartySession(session.id).status, "reviewing");
   assert.equal(repository.getPartySession(session.id).syncedMatchCount, 1);
   assert.equal(repository.getPartyReviewSnapshot(session.id).report.matches, 1);
+  assert.equal(collectedBatches.length, 1);
+  assert.deepEqual(
+    collectedBatches[0].rawMatches.map((match) => match.data.id),
+    ["match-1"],
+  );
+  assert.deepEqual(
+    collectedBatches[0].partyMembers.map((member) => member.accountId).sort(),
+    ["account-1", "account-2"],
+  );
   assert.deepEqual(
     first.editReplies[0].components[0]
       .toJSON()
@@ -91,6 +111,11 @@ test("늦게 반영된 마지막 경기를 새로고침으로 추가한 뒤 결�
   assert.equal(repository.getPartySession(session.id).syncedMatchCount, 2);
   assert.equal(repository.getPartyReviewSnapshot(session.id).report.matches, 2);
   assert.equal(repository.getMissionCompletions(session.id).length, 3);
+  assert.equal(collectedBatches.length, 2);
+  assert.deepEqual(
+    collectedBatches[1].rawMatches.map((match) => match.data.id),
+    ["match-1", "match-2"],
+  );
   assert.match(
     refresh.editReplies[0].embeds[0].toJSON().fields[0].value,
     /함께한 경기 \*\*2경기\*\*/,

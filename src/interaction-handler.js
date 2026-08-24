@@ -38,7 +38,12 @@ import { analyzeTrackedKills } from "./squad-kills.js";
 
 const MAX_PARTY_MEMBERS = 10;
 
-export function createInteractionHandler({ pubgApi, repository, allowedChannelId = "" }) {
+export function createInteractionHandler({
+  pubgApi,
+  repository,
+  allowedChannelId = "",
+  dataCollector,
+}) {
   return async function handleInteraction(interaction) {
     try {
       if (interaction.isAutocomplete()) {
@@ -55,12 +60,12 @@ export function createInteractionHandler({ pubgApi, repository, allowedChannelId
           return;
         }
 
-        await handleCommand(interaction, pubgApi, repository);
+        await handleCommand(interaction, pubgApi, repository, dataCollector);
         return;
       }
 
       if (interaction.isButton() && interaction.customId.startsWith("party:")) {
-        await handlePartyButton(interaction, pubgApi, repository);
+        await handlePartyButton(interaction, pubgApi, repository, dataCollector);
       }
     } catch (error) {
       if (!(error instanceof InteractionAlreadyHandledError)) {
@@ -77,7 +82,7 @@ export function createInteractionHandler({ pubgApi, repository, allowedChannelId
   };
 }
 
-async function handleCommand(interaction, pubgApi, repository) {
+async function handleCommand(interaction, pubgApi, repository, dataCollector) {
   switch (interaction.commandName) {
     case statsCommand.name:
       await handleStats(interaction, pubgApi, repository);
@@ -92,7 +97,12 @@ async function handleCommand(interaction, pubgApi, repository) {
       await handlePartyStart(interaction, repository);
       break;
     case partySummaryCommand.name:
-      await handlePartySummaryCommand(interaction, pubgApi, repository);
+      await handlePartySummaryCommand(
+        interaction,
+        pubgApi,
+        repository,
+        dataCollector,
+      );
       break;
     case partyCancelCommand.name:
       await handlePartyCancelCommand(interaction, repository);
@@ -244,7 +254,12 @@ async function handlePartyStart(interaction, repository) {
   });
 }
 
-async function handlePartySummaryCommand(interaction, pubgApi, repository) {
+async function handlePartySummaryCommand(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
   assertGuildInteraction(interaction);
   const session = repository.getOpenPartySession(interaction.guildId, interaction.channelId);
 
@@ -274,7 +289,13 @@ async function handlePartySummaryCommand(interaction, pubgApi, repository) {
 
   await assertPartyOwner(interaction, session);
   await interaction.deferReply();
-  await publishPartyReview(interaction, session, pubgApi, repository);
+  await publishPartyReview(
+    interaction,
+    session,
+    pubgApi,
+    repository,
+    dataCollector,
+  );
 }
 
 async function handlePartyCancelCommand(interaction, repository) {
@@ -304,7 +325,12 @@ async function handlePartyCancelCommand(interaction, repository) {
   );
 }
 
-async function handlePartyButton(interaction, pubgApi, repository) {
+async function handlePartyButton(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
   const [, action, rawSessionId] = interaction.customId.split(":");
   const sessionId = Number(rawSessionId);
   const session = repository.getPartySession(sessionId);
@@ -378,7 +404,13 @@ async function handlePartyButton(interaction, pubgApi, repository) {
 
     await assertPartyOwner(interaction, session);
     await interaction.deferUpdate();
-    await publishPartyReview(interaction, session, pubgApi, repository);
+    await publishPartyReview(
+      interaction,
+      session,
+      pubgApi,
+      repository,
+      dataCollector,
+    );
     return;
   }
 
@@ -393,7 +425,13 @@ async function handlePartyButton(interaction, pubgApi, repository) {
 
     await assertPartyOwner(interaction, session, "새로고침");
     await interaction.deferUpdate();
-    await publishPartyReview(interaction, session, pubgApi, repository);
+    await publishPartyReview(
+      interaction,
+      session,
+      pubgApi,
+      repository,
+      dataCollector,
+    );
     return;
   }
 
@@ -521,7 +559,7 @@ async function handlePartyJoin(interaction, session, repository) {
   });
 }
 
-async function collectPartyReview(session, pubgApi, repository) {
+async function collectPartyReview(session, pubgApi, repository, dataCollector) {
   const members = repository.getPartyMembers(session.id);
   const registeredMembers = members.filter((member) => member.accountId);
 
@@ -558,6 +596,17 @@ async function collectPartyReview(session, pubgApi, repository) {
   const telemetries = await pubgApi.getTelemetries(
     selectedMatches.map(({ rawMatch }) => rawMatch),
   );
+
+  if (dataCollector) {
+    await dataCollector.collectPartyMatches({
+      sessionId: session.id,
+      rawMatches: selectedMatches.map(({ rawMatch }) => rawMatch),
+      telemetries,
+      partyMembers: registeredMembers,
+      platform: pubgApi.platform,
+    });
+  }
+
   const partyMatches = selectedMatches.map(({ partyMatch }, index) => {
     const friendlyKnocks = countFriendlyKnocks(telemetries[index], accountIds);
     const killAnalysis = analyzeTrackedKills(telemetries[index], accountIds);
@@ -609,8 +658,19 @@ async function collectPartyReview(session, pubgApi, repository) {
   };
 }
 
-async function publishPartyReview(interaction, session, pubgApi, repository) {
-  const review = await collectPartyReview(session, pubgApi, repository);
+async function publishPartyReview(
+  interaction,
+  session,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
+  const review = await collectPartyReview(
+    session,
+    pubgApi,
+    repository,
+    dataCollector,
+  );
   const generatedAt = new Date().toISOString();
   const snapshot = {
     version: 1,

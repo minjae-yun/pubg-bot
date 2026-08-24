@@ -1,5 +1,6 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { createRepository } from "./database.js";
+import { createSanhokDataCollector } from "./data-collection/sanhok-collector.js";
 import { optionalEnv, positiveNumberEnv, requireEnv } from "./env.js";
 import { createInteractionHandler } from "./interaction-handler.js";
 import { PubgApiClient } from "./pubg-api.js";
@@ -9,6 +10,10 @@ const allowedChannelId = optionalEnv("ALLOWED_CHANNEL_ID");
 const pubgPlatform = optionalEnv("PUBG_PLATFORM", "steam");
 const cacheTtlMs = positiveNumberEnv("CACHE_TTL_SECONDS", 120) * 1_000;
 const databasePath = optionalEnv("DATABASE_PATH", "data/bot.sqlite");
+const telemetryArchivePath = optionalEnv(
+  "TELEMETRY_ARCHIVE_PATH",
+  "data/telemetry",
+);
 
 const pubgApi = new PubgApiClient({
   apiKey: requireEnv("PUBG_API_KEY"),
@@ -16,6 +21,10 @@ const pubgApi = new PubgApiClient({
   cacheTtlMs,
 });
 const repository = createRepository(databasePath);
+const dataCollector = createSanhokDataCollector({
+  repository,
+  archiveRoot: telemetryArchivePath,
+});
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -24,7 +33,12 @@ client.once(Events.ClientReady, (readyClient) => {
 
 client.on(
   Events.InteractionCreate,
-  createInteractionHandler({ pubgApi, repository, allowedChannelId }),
+  createInteractionHandler({
+    pubgApi,
+    repository,
+    allowedChannelId,
+    dataCollector,
+  }),
 );
 
 client.on(Events.Error, (error) => {
