@@ -2,7 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+const DATA_PARSER_VERSION = 1;
 
 const REGISTERED_PLAYERS_SCHEMA = `
   CREATE TABLE IF NOT EXISTS registered_players (
@@ -72,6 +73,119 @@ const PARTY_MISSIONS_SCHEMA = `
   );
 `;
 
+const DATA_COLLECTION_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS collected_matches (
+    match_id TEXT PRIMARY KEY,
+    platform TEXT NOT NULL,
+    map_name TEXT NOT NULL,
+    game_mode TEXT,
+    created_at TEXT NOT NULL,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    telemetry_url TEXT,
+    raw_telemetry_path TEXT,
+    raw_telemetry_sha256 TEXT,
+    raw_telemetry_bytes INTEGER,
+    parser_version INTEGER NOT NULL DEFAULT ${DATA_PARSER_VERSION},
+    collected_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS party_session_matches (
+    session_id INTEGER NOT NULL REFERENCES party_sessions(id) ON DELETE CASCADE,
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    linked_at TEXT NOT NULL,
+    confirmed INTEGER NOT NULL DEFAULT 0 CHECK (confirmed IN (0, 1)),
+    PRIMARY KEY (session_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS match_players (
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL,
+    discord_user_id TEXT,
+    player_name TEXT,
+    team_id INTEGER,
+    placement INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    damage REAL NOT NULL DEFAULT 0,
+    assists INTEGER NOT NULL DEFAULT 0,
+    revives INTEGER NOT NULL DEFAULT 0,
+    headshot_kills INTEGER NOT NULL DEFAULT 0,
+    longest_kill REAL NOT NULL DEFAULT 0,
+    team_kills INTEGER NOT NULL DEFAULT 0,
+    death_type TEXT,
+    survival_seconds REAL NOT NULL DEFAULT 0,
+    is_party_member INTEGER NOT NULL DEFAULT 0 CHECK (is_party_member IN (0, 1)),
+    PRIMARY KEY (match_id, account_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS landing_events (
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL,
+    team_id INTEGER,
+    event_at TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (match_id, account_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS player_positions (
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL,
+    event_at TEXT NOT NULL,
+    elapsed_seconds REAL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    z REAL NOT NULL DEFAULT 0,
+    is_in_blue_zone INTEGER NOT NULL DEFAULT 0 CHECK (is_in_blue_zone IN (0, 1)),
+    vehicle_type TEXT,
+    alive_players INTEGER,
+    PRIMARY KEY (match_id, account_id, event_at)
+  );
+
+  CREATE TABLE IF NOT EXISTS death_events (
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    victim_account_id TEXT NOT NULL,
+    killer_account_id TEXT,
+    victim_team_id INTEGER,
+    killer_team_id INTEGER,
+    event_at TEXT NOT NULL,
+    x REAL,
+    y REAL,
+    z REAL,
+    damage_type TEXT,
+    damage_causer TEXT,
+    distance REAL,
+    is_suicide INTEGER NOT NULL DEFAULT 0 CHECK (is_suicide IN (0, 1)),
+    is_team_kill INTEGER NOT NULL DEFAULT 0 CHECK (is_team_kill IN (0, 1)),
+    PRIMARY KEY (match_id, victim_account_id, event_at)
+  );
+
+  CREATE TABLE IF NOT EXISTS zone_snapshots (
+    match_id TEXT NOT NULL REFERENCES collected_matches(match_id) ON DELETE CASCADE,
+    event_at TEXT NOT NULL,
+    elapsed_seconds REAL,
+    phase REAL,
+    alive_teams INTEGER,
+    alive_players INTEGER,
+    safety_x REAL,
+    safety_y REAL,
+    safety_radius REAL,
+    warning_x REAL,
+    warning_y REAL,
+    warning_radius REAL,
+    PRIMARY KEY (match_id, event_at)
+  );
+
+  CREATE INDEX IF NOT EXISTS collected_matches_map_created_at
+    ON collected_matches (map_name, created_at);
+
+  CREATE INDEX IF NOT EXISTS match_players_account_id
+    ON match_players (account_id, match_id);
+
+  CREATE INDEX IF NOT EXISTS death_events_victim
+    ON death_events (victim_account_id, match_id);
+`;
+
 function tableExists(database, tableName) {
   return Boolean(
     database
@@ -90,7 +204,24 @@ function createCurrentSchema(database) {
     ${PARTY_SESSIONS_SCHEMA}
     ${PARTY_MEMBERS_SCHEMA}
     ${PARTY_MISSIONS_SCHEMA}
+    ${DATA_COLLECTION_SCHEMA}
   `);
+}
+
+function migrateVersion1To2(database) {
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${DATA_COLLECTION_SCHEMA}
+      PRAGMA user_version = ${SCHEMA_VERSION};
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) {
+      database.exec("ROLLBACK;");
+    }
+    throw error;
+  }
 }
 
 function migrateLegacyPartySchema(database) {
@@ -136,6 +267,7 @@ function migrateLegacyPartySchema(database) {
       DROP TABLE party_sessions_legacy;
 
       ${PARTY_MISSIONS_SCHEMA}
+      ${DATA_COLLECTION_SCHEMA}
 
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
@@ -168,6 +300,11 @@ function initializeDatabase(database) {
 
   if (currentVersion === 0 && tableExists(database, "party_sessions")) {
     migrateLegacyPartySchema(database);
+    return;
+  }
+
+  if (currentVersion === 1) {
+    migrateVersion1To2(database);
     return;
   }
 

@@ -281,7 +281,7 @@ test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전
     assert.equal(repository.getPartyMembers(7)[0].playerName, "PlayerOne");
     assert.equal(
       repository.database.prepare("PRAGMA user_version;").get().user_version,
-      1,
+      2,
     );
     assert.deepEqual(repository.database.prepare("PRAGMA foreign_key_check;").all(), []);
 
@@ -292,6 +292,76 @@ test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전
     assert.match(schema, /'reviewing'/);
 
     repository.close();
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test("스키마 V1 데이터를 보존하면서 사녹 수집 테이블을 추가한다", () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), "pubg-bot-v2-migration-"));
+  const databasePath = join(temporaryDirectory, "version-1.sqlite");
+
+  try {
+    const initialRepository = createRepository(databasePath);
+    initialRepository.upsertPlayer({
+      guildId: "guild-1",
+      discordUserId: "user-1",
+      accountId: "account-1",
+      playerName: "PlayerOne",
+      platform: "steam",
+    });
+    const { session } = initialRepository.createPartySession({
+      guildId: "guild-1",
+      channelId: "channel-1",
+      ownerUserId: "user-1",
+    });
+    initialRepository.close();
+
+    const versionOneDatabase = new DatabaseSync(databasePath);
+    versionOneDatabase.exec(`
+      DROP TABLE zone_snapshots;
+      DROP TABLE death_events;
+      DROP TABLE player_positions;
+      DROP TABLE landing_events;
+      DROP TABLE match_players;
+      DROP TABLE party_session_matches;
+      DROP TABLE collected_matches;
+      PRAGMA user_version = 1;
+    `);
+    versionOneDatabase.close();
+
+    const migratedRepository = createRepository(databasePath);
+    const tableNames = migratedRepository.database
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((row) => row.name);
+
+    assert.equal(
+      migratedRepository.database.prepare("PRAGMA user_version;").get().user_version,
+      2,
+    );
+    assert.equal(
+      migratedRepository.getPlayer("guild-1", "user-1").playerName,
+      "PlayerOne",
+    );
+    assert.equal(migratedRepository.getPartySession(session.id).status, "recruiting");
+    assert.deepEqual(
+      [
+        "collected_matches",
+        "party_session_matches",
+        "match_players",
+        "landing_events",
+        "player_positions",
+        "death_events",
+        "zone_snapshots",
+      ].filter((tableName) => !tableNames.includes(tableName)),
+      [],
+    );
+    assert.deepEqual(
+      migratedRepository.database.prepare("PRAGMA foreign_key_check;").all(),
+      [],
+    );
+    migratedRepository.close();
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });
   }
