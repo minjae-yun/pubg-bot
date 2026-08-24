@@ -260,7 +260,7 @@ function normalizePlayer(player) {
   };
 }
 
-function findTelemetryUrl(match) {
+export function findTelemetryUrl(match) {
   const assetIds = new Set(
     (match?.data?.relationships?.assets?.data ?? []).map((asset) => asset.id),
   );

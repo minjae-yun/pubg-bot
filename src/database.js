@@ -691,6 +691,269 @@ export class BotRepository {
       .all(sessionId);
   }
 
+  saveCollectedMatch(sessionId, dataset, archive = {}) {
+    const collectedAt = new Date().toISOString();
+    const match = dataset.match;
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      this.database
+        .prepare(`
+          INSERT INTO collected_matches (
+            match_id,
+            platform,
+            map_name,
+            game_mode,
+            created_at,
+            duration_seconds,
+            telemetry_url,
+            raw_telemetry_path,
+            raw_telemetry_sha256,
+            raw_telemetry_bytes,
+            parser_version,
+            collected_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (match_id) DO UPDATE SET
+            platform = excluded.platform,
+            map_name = excluded.map_name,
+            game_mode = excluded.game_mode,
+            created_at = excluded.created_at,
+            duration_seconds = excluded.duration_seconds,
+            telemetry_url = excluded.telemetry_url,
+            raw_telemetry_path = COALESCE(
+              excluded.raw_telemetry_path,
+              collected_matches.raw_telemetry_path
+            ),
+            raw_telemetry_sha256 = COALESCE(
+              excluded.raw_telemetry_sha256,
+              collected_matches.raw_telemetry_sha256
+            ),
+            raw_telemetry_bytes = COALESCE(
+              excluded.raw_telemetry_bytes,
+              collected_matches.raw_telemetry_bytes
+            ),
+            parser_version = excluded.parser_version,
+            collected_at = excluded.collected_at
+        `)
+        .run(
+          match.matchId,
+          match.platform,
+          match.mapName,
+          match.gameMode,
+          match.createdAt,
+          match.durationSeconds,
+          match.telemetryUrl,
+          archive.path ?? null,
+          archive.sha256 ?? null,
+          archive.bytes ?? null,
+          match.parserVersion,
+          collectedAt,
+        );
+
+      this.database
+        .prepare(`
+          INSERT OR IGNORE INTO party_session_matches (
+            session_id, match_id, linked_at, confirmed
+          ) VALUES (?, ?, ?, 0)
+        `)
+        .run(sessionId, match.matchId, collectedAt);
+
+      for (const tableName of [
+        "match_players",
+        "landing_events",
+        "player_positions",
+        "death_events",
+        "zone_snapshots",
+      ]) {
+        this.database
+          .prepare(`DELETE FROM ${tableName} WHERE match_id = ?`)
+          .run(match.matchId);
+      }
+
+      this.insertMatchPlayers(match.matchId, dataset.players ?? []);
+      this.insertLandingEvents(match.matchId, dataset.landings ?? []);
+      this.insertPlayerPositions(match.matchId, dataset.positions ?? []);
+      this.insertDeathEvents(match.matchId, dataset.deaths ?? []);
+      this.insertZoneSnapshots(match.matchId, dataset.zones ?? []);
+      this.database.exec("COMMIT;");
+      return this.getCollectedMatch(match.matchId);
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
+  }
+
+  getCollectedMatch(matchId) {
+    return this.database
+      .prepare(`
+        SELECT
+          match_id AS matchId,
+          platform,
+          map_name AS mapName,
+          game_mode AS gameMode,
+          created_at AS createdAt,
+          duration_seconds AS durationSeconds,
+          telemetry_url AS telemetryUrl,
+          raw_telemetry_path AS rawTelemetryPath,
+          raw_telemetry_sha256 AS rawTelemetrySha256,
+          raw_telemetry_bytes AS rawTelemetryBytes,
+          parser_version AS parserVersion,
+          collected_at AS collectedAt
+        FROM collected_matches
+        WHERE match_id = ?
+      `)
+      .get(matchId);
+  }
+
+  getPartyCollectedMatches(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT
+          matches.match_id AS matchId,
+          matches.map_name AS mapName,
+          matches.game_mode AS gameMode,
+          matches.created_at AS createdAt,
+          links.confirmed
+        FROM party_session_matches AS links
+        JOIN collected_matches AS matches ON matches.match_id = links.match_id
+        WHERE links.session_id = ?
+        ORDER BY matches.created_at ASC
+      `)
+      .all(sessionId);
+  }
+
+  insertMatchPlayers(matchId, players) {
+    const statement = this.database.prepare(`
+      INSERT INTO match_players (
+        match_id, account_id, discord_user_id, player_name, team_id,
+        placement, kills, damage, assists, revives, headshot_kills,
+        longest_kill, team_kills, death_type, survival_seconds, is_party_member
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const player of players) {
+      statement.run(
+        matchId,
+        player.accountId,
+        player.discordUserId,
+        player.playerName,
+        player.teamId,
+        player.placement,
+        player.kills,
+        player.damage,
+        player.assists,
+        player.revives,
+        player.headshotKills,
+        player.longestKill,
+        player.teamKills,
+        player.deathType,
+        player.survivalSeconds,
+        player.isPartyMember ? 1 : 0,
+      );
+    }
+  }
+
+  insertLandingEvents(matchId, landings) {
+    const statement = this.database.prepare(`
+      INSERT INTO landing_events (
+        match_id, account_id, team_id, event_at, x, y, z
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const landing of landings) {
+      statement.run(
+        matchId,
+        landing.accountId,
+        landing.teamId,
+        landing.eventAt,
+        landing.x,
+        landing.y,
+        landing.z,
+      );
+    }
+  }
+
+  insertPlayerPositions(matchId, positions) {
+    const statement = this.database.prepare(`
+      INSERT INTO player_positions (
+        match_id, account_id, event_at, elapsed_seconds, x, y, z,
+        is_in_blue_zone, vehicle_type, alive_players
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const position of positions) {
+      statement.run(
+        matchId,
+        position.accountId,
+        position.eventAt,
+        position.elapsedSeconds,
+        position.x,
+        position.y,
+        position.z,
+        position.isInBlueZone ? 1 : 0,
+        position.vehicleType,
+        position.alivePlayers,
+      );
+    }
+  }
+
+  insertDeathEvents(matchId, deaths) {
+    const statement = this.database.prepare(`
+      INSERT INTO death_events (
+        match_id, victim_account_id, killer_account_id, victim_team_id,
+        killer_team_id, event_at, x, y, z, damage_type, damage_causer,
+        distance, is_suicide, is_team_kill
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const death of deaths) {
+      statement.run(
+        matchId,
+        death.victimAccountId,
+        death.killerAccountId,
+        death.victimTeamId,
+        death.killerTeamId,
+        death.eventAt,
+        death.x,
+        death.y,
+        death.z,
+        death.damageType,
+        death.damageCauser,
+        death.distance,
+        death.isSuicide ? 1 : 0,
+        death.isTeamKill ? 1 : 0,
+      );
+    }
+  }
+
+  insertZoneSnapshots(matchId, zones) {
+    const statement = this.database.prepare(`
+      INSERT INTO zone_snapshots (
+        match_id, event_at, elapsed_seconds, phase, alive_teams, alive_players,
+        safety_x, safety_y, safety_radius, warning_x, warning_y, warning_radius
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const zone of zones) {
+      statement.run(
+        matchId,
+        zone.eventAt,
+        zone.elapsedSeconds,
+        zone.phase,
+        zone.aliveTeams,
+        zone.alivePlayers,
+        zone.safetyX,
+        zone.safetyY,
+        zone.safetyRadius,
+        zone.warningX,
+        zone.warningY,
+        zone.warningRadius,
+      );
+    }
+  }
+
   completePartySession(sessionId) {
     const result = this.database
       .prepare(`
@@ -704,15 +967,37 @@ export class BotRepository {
   }
 
   confirmPartySession(sessionId) {
-    const result = this.database
-      .prepare(`
-        UPDATE party_sessions
-        SET status = 'completed', ended_at = ?
-        WHERE id = ? AND status = 'reviewing'
-      `)
-      .run(new Date().toISOString(), sessionId);
+    this.database.exec("BEGIN IMMEDIATE;");
 
-    return result.changes > 0;
+    try {
+      const result = this.database
+        .prepare(`
+          UPDATE party_sessions
+          SET status = 'completed', ended_at = ?
+          WHERE id = ? AND status = 'reviewing'
+        `)
+        .run(new Date().toISOString(), sessionId);
+
+      if (result.changes === 0) {
+        this.database.exec("ROLLBACK;");
+        return false;
+      }
+
+      this.database
+        .prepare(`
+          UPDATE party_session_matches
+          SET confirmed = 1
+          WHERE session_id = ?
+        `)
+        .run(sessionId);
+      this.database.exec("COMMIT;");
+      return true;
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
   }
 
   cancelPartySession(sessionId) {
