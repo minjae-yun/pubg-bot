@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import { createRepository } from "./database.js";
-import { createSanhokDataCollector } from "./data-collection/sanhok-collector.js";
+import { createMatchDataCollector } from "./data-collection/sanhok-collector.js";
 import { optionalEnv, positiveNumberEnv, requireEnv } from "./env.js";
 import { createInteractionHandler } from "./interaction-handler.js";
 import { PubgApiClient } from "./pubg-api.js";
@@ -21,7 +21,7 @@ const pubgApi = new PubgApiClient({
   cacheTtlMs,
 });
 const repository = createRepository(databasePath);
-const dataCollector = createSanhokDataCollector({
+const dataCollector = createMatchDataCollector({
   repository,
   archiveRoot: telemetryArchivePath,
 });

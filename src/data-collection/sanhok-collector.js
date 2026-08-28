@@ -6,12 +6,17 @@ import { promisify } from "node:util";
 import { findTelemetryUrl } from "../pubg-api.js";
 
 export const SANHOK_MAP_NAME = "Savage_Main";
+export const TAEGO_MAP_NAME = "Tiger_Main";
+export const SUPPORTED_MAP_NAMES = new Set([
+  SANHOK_MAP_NAME,
+  TAEGO_MAP_NAME,
+]);
 export const DATA_PARSER_VERSION = 1;
 
 const gzipAsync = promisify(gzip);
 const KILL_EVENT_TYPES = new Set(["LogPlayerKill", "LogPlayerKillV2"]);
 
-export function extractSanhokDataset({
+export function extractSupportedMapDataset({
   rawMatch,
   telemetry = [],
   partyMembers = [],
@@ -22,7 +27,7 @@ export function extractSanhokDataset({
   const attributes = rawMatch?.data?.attributes ?? {};
   const mapName = attributes.mapName ?? matchStart?.mapName;
 
-  if (mapName !== SANHOK_MAP_NAME) {
+  if (!SUPPORTED_MAP_NAMES.has(mapName)) {
     return null;
   }
 
@@ -30,7 +35,7 @@ export function extractSanhokDataset({
   const createdAt = validIsoDate(attributes.createdAt ?? matchStart?._D);
 
   if (!matchId || !createdAt) {
-    throw new Error("사녹 경기의 ID 또는 시작 시각을 찾지 못했습니다.");
+    throw new Error("수집 대상 경기의 ID 또는 시작 시각을 찾지 못했습니다.");
   }
 
   const partyMemberByAccountId = new Map(
@@ -70,6 +75,7 @@ export function extractSanhokDataset({
 
 export async function archiveTelemetry({
   matchId,
+  mapName,
   telemetry,
   archiveRoot = "data/telemetry",
 }) {
@@ -77,9 +83,13 @@ export async function archiveTelemetry({
     throw new Error("안전하지 않은 PUBG 경기 ID입니다.");
   }
 
+  if (!SUPPORTED_MAP_NAMES.has(mapName)) {
+    throw new Error("지원하지 않는 PUBG 맵은 보관할 수 없습니다.");
+  }
+
   const rawBuffer = Buffer.from(JSON.stringify(telemetry));
   const compressed = await gzipAsync(rawBuffer, { level: 9 });
-  const directory = resolve(archiveRoot, SANHOK_MAP_NAME);
+  const directory = resolve(archiveRoot, mapName);
   const filePath = resolve(directory, `${matchId}.json.gz`);
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await mkdir(directory, { recursive: true });
@@ -99,7 +109,7 @@ export async function archiveTelemetry({
   };
 }
 
-export function createSanhokDataCollector({
+export function createMatchDataCollector({
   repository,
   archiveRoot = "data/telemetry",
 }) {
@@ -117,7 +127,7 @@ export function createSanhokDataCollector({
       for (let index = 0; index < rawMatches.length; index += 1) {
         const rawMatch = rawMatches[index];
         const telemetry = telemetries[index] ?? [];
-        const dataset = extractSanhokDataset({
+        const dataset = extractSupportedMapDataset({
           rawMatch,
           telemetry,
           partyMembers,
@@ -131,6 +141,7 @@ export function createSanhokDataCollector({
 
         const archive = await archiveTelemetry({
           matchId: dataset.match.matchId,
+          mapName: dataset.match.mapName,
           telemetry,
           archiveRoot,
         });

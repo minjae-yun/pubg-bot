@@ -8,8 +8,9 @@ import { promisify } from "node:util";
 import { createRepository } from "../src/database.js";
 import {
   archiveTelemetry,
-  extractSanhokDataset,
+  extractSupportedMapDataset,
   SANHOK_MAP_NAME,
+  TAEGO_MAP_NAME,
 } from "../src/data-collection/sanhok-collector.js";
 
 const gunzipAsync = promisify(gunzip);
@@ -17,7 +18,7 @@ const gunzipAsync = promisify(gunzip);
 test("사녹 경기에서 학습용 전적과 텔레메트리 사건을 추출한다", () => {
   const rawMatch = createRawMatch();
   const telemetry = createTelemetry();
-  const dataset = extractSanhokDataset({
+  const dataset = extractSupportedMapDataset({
     rawMatch,
     telemetry,
     partyMembers: [
@@ -64,12 +65,26 @@ test("사녹 경기에서 학습용 전적과 텔레메트리 사건을 추출�
   assert.equal(dataset.zones[0].safetyRadius, 200_000);
 });
 
-test("사녹이 아닌 경기는 수집 대상에서 제외한다", () => {
+test("태이고 경기도 학습용 데이터로 추출한다", () => {
+  const rawMatch = createRawMatch();
+  rawMatch.data.id = "match-taego-1";
+  rawMatch.data.attributes.mapName = TAEGO_MAP_NAME;
+
+  const dataset = extractSupportedMapDataset({
+    rawMatch,
+    telemetry: createTelemetry(),
+  });
+
+  assert.equal(dataset.match.matchId, "match-taego-1");
+  assert.equal(dataset.match.mapName, TAEGO_MAP_NAME);
+});
+
+test("사녹과 태이고가 아닌 경기는 수집 대상에서 제외한다", () => {
   const rawMatch = createRawMatch();
   rawMatch.data.attributes.mapName = "Baltic_Main";
 
   assert.equal(
-    extractSanhokDataset({ rawMatch, telemetry: createTelemetry() }),
+    extractSupportedMapDataset({ rawMatch, telemetry: createTelemetry() }),
     null,
   );
 });
@@ -81,6 +96,7 @@ test("원본 텔레메트리를 gzip 파일로 보관하고 무결성 값을 남
   try {
     const archive = await archiveTelemetry({
       matchId: "match-sanhok-1",
+      mapName: SANHOK_MAP_NAME,
       telemetry,
       archiveRoot: temporaryDirectory,
     });
@@ -96,6 +112,23 @@ test("원본 텔레메트리를 gzip 파일로 보관하고 무결성 값을 남
   }
 });
 
+test("태이고 원본 텔레메트리도 맵별 폴더에 보관한다", async () => {
+  const temporaryDirectory = await mkdtemp(join(tmpdir(), "pubg-telemetry-"));
+
+  try {
+    const archive = await archiveTelemetry({
+      matchId: "match-taego-1",
+      mapName: TAEGO_MAP_NAME,
+      telemetry: createTelemetry(),
+      archiveRoot: temporaryDirectory,
+    });
+
+    assert.match(archive.path, /Tiger_Main\/match-taego-1\.json\.gz$/);
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
 test("같은 경기를 다시 저장해도 중복되지 않고 결산 확정 상태가 연결된다", () => {
   const repository = createRepository(":memory:");
   const { session } = repository.createPartySession({
@@ -104,7 +137,7 @@ test("같은 경기를 다시 저장해도 중복되지 않고 결산 확정 상
     ownerUserId: "owner-1",
   });
   repository.startPartySession(session.id);
-  const dataset = extractSanhokDataset({
+  const dataset = extractSupportedMapDataset({
     rawMatch: createRawMatch(),
     telemetry: createTelemetry(),
     partyMembers: [
