@@ -236,18 +236,25 @@ async function handleRegister(interaction, pubgApi, repository) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const requestedName = interaction.options.getString("닉네임", true);
+  const displayName =
+    interaction.options.getString("이름")?.trim() || undefined;
   const player = await pubgApi.getPlayerByName(requestedName);
-  repository.upsertPlayer({
+  const registeredPlayer = repository.upsertPlayer({
     guildId: interaction.guildId,
     discordUserId: interaction.user.id,
     accountId: player.accountId,
     playerName: player.playerName,
+    displayName,
     platform: pubgApi.platform,
   });
 
-  await interaction.editReply(
+  const lines = [
     `✅ <@${interaction.user.id}> 계정에 PUBG 닉네임 **${player.playerName}**을(를) 연결했습니다.`,
-  );
+  ];
+  if (registeredPlayer.displayName) {
+    lines.push(`킬내기 표시 이름: **${registeredPlayer.displayName}**`);
+  }
+  await interaction.editReply(lines.join("\n"));
 }
 
 async function handlePartyStart(interaction, repository) {

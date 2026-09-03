@@ -248,6 +248,7 @@ function memberSnapshot(interaction, registeredPlayer) {
   return {
     discordUserId: interaction.user.id,
     displayName:
+      registeredPlayer.displayName ||
       interaction.member?.displayName ||
       interaction.user.globalName ||
       interaction.user.username ||

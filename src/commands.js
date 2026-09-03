@@ -67,7 +67,7 @@ export const recentStatsCommand = new SlashCommandBuilder()
 
 export const registerPlayerCommand = new SlashCommandBuilder()
   .setName("등록")
-  .setDescription("내 디스코드 계정에 PUBG 닉네임을 연결합니다.")
+  .setDescription("PUBG 닉네임과 킬내기 표시 이름을 연결합니다.")
   .addStringOption((option) =>
     option
       .setName("닉네임")
@@ -75,6 +75,14 @@ export const registerPlayerCommand = new SlashCommandBuilder()
       .setRequired(true)
       .setMinLength(1)
       .setMaxLength(30),
+  )
+  .addStringOption((option) =>
+    option
+      .setName("이름")
+      .setDescription("킬내기 시트에 표시할 이름(예: 민재)")
+      .setRequired(false)
+      .setMinLength(1)
+      .setMaxLength(20),
   );
 
 export const partyStartCommand = new SlashCommandBuilder()

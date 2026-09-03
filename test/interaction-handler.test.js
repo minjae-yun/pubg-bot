@@ -1,6 +1,44 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createRepository } from "../src/database.js";
 import { createInteractionHandler } from "../src/interaction-handler.js";
+
+test("/등록에서 킬내기 표시 이름을 함께 저장한다", async () => {
+  const repository = createRepository(":memory:");
+  const replies = [];
+  const pubgApi = {
+    platform: "steam",
+    async getPlayerByName(playerName) {
+      assert.equal(playerName, "gooeyash3179");
+      return {
+        accountId: "account-1",
+        playerName: "gooeyash3179",
+      };
+    },
+  };
+  const handler = createInteractionHandler({ pubgApi, repository });
+  const interaction = {
+    ...baseInteraction({ userId: "user-1" }),
+    commandName: "등록",
+    options: {
+      getString(name) {
+        return name === "닉네임" ? "gooeyash3179" : "민재";
+      },
+    },
+    isChatInputCommand: () => true,
+    isButton: () => false,
+    deferReply: async () => {},
+    editReply: async (payload) => replies.push(payload),
+  };
+
+  await handler(interaction);
+
+  const registeredPlayer = repository.getPlayer("guild-1", "user-1");
+  assert.equal(registeredPlayer.playerName, "gooeyash3179");
+  assert.equal(registeredPlayer.displayName, "민재");
+  assert.match(replies[0], /킬내기 표시 이름: \*\*민재\*\*/);
+  repository.close();
+});
 
 test("/파티취소는 현재 파티를 종료한다", async () => {
   const replies = [];

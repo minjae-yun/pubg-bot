@@ -136,6 +136,7 @@ test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
     discordUserId: "user-1",
     accountId: "account-1",
     playerName: "PlayerOne",
+    displayName: "민재",
     platform: "steam",
   });
   repository.upsertPlayer({
@@ -147,6 +148,34 @@ test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   });
 
   assert.equal(repository.getPlayer("guild-1", "user-1").playerName, "PlayerOne");
+  assert.equal(repository.getPlayer("guild-1", "user-1").displayName, "민재");
+  repository.upsertPlayer({
+    guildId: "guild-1",
+    discordUserId: "user-1",
+    accountId: "account-1",
+    playerName: "PlayerOne",
+    platform: "steam",
+  });
+  assert.equal(repository.getPlayer("guild-1", "user-1").displayName, "민재");
+  repository.upsertPlayer({
+    guildId: "guild-1",
+    discordUserId: "user-1",
+    accountId: "account-1",
+    playerName: "PlayerOne",
+    displayName: "민재2",
+    platform: "steam",
+  });
+  assert.equal(repository.getPlayer("guild-1", "user-1").displayName, "민재2");
+  assert.equal(
+    repository.database
+      .prepare(`
+        SELECT COUNT(*) AS count
+        FROM registered_players
+        WHERE guild_id = ? AND discord_user_id = ?
+      `)
+      .get("guild-1", "user-1").count,
+    1,
+  );
 
   const { session, created } = repository.createPartySession({
     guildId: "guild-1",
@@ -403,7 +432,7 @@ test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전
     assert.equal(repository.getPartyMembers(7)[0].playerName, "PlayerOne");
     assert.equal(
       repository.database.prepare("PRAGMA user_version;").get().user_version,
-      3,
+      4,
     );
     assert.deepEqual(repository.database.prepare("PRAGMA foreign_key_check;").all(), []);
 
@@ -460,7 +489,7 @@ test("스키마 V1 데이터를 보존하면서 사녹 수집 테이블을 추�
 
     assert.equal(
       migratedRepository.database.prepare("PRAGMA user_version;").get().user_version,
-      3,
+      4,
     );
     assert.equal(
       migratedRepository.getPlayer("guild-1", "user-1").playerName,
@@ -484,6 +513,71 @@ test("스키마 V1 데이터를 보존하면서 사녹 수집 테이블을 추�
       [],
     );
     migratedRepository.close();
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test("스키마 V3의 기존 플레이어 ID와 등록 정보를 보존하며 표시 이름을 추가한다", () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), "pubg-bot-v4-migration-"));
+  const databasePath = join(temporaryDirectory, "version-3.sqlite");
+  const versionThreeDatabase = new DatabaseSync(databasePath);
+
+  versionThreeDatabase.exec(`
+    CREATE TABLE registered_players (
+      guild_id TEXT NOT NULL,
+      discord_user_id TEXT NOT NULL,
+      pubg_account_id TEXT NOT NULL,
+      pubg_name TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (guild_id, discord_user_id)
+    );
+
+    INSERT INTO registered_players VALUES (
+      'guild-1', 'user-1', 'account-1', 'PlayerOne', 'steam',
+      '2026-08-20T10:00:00.000Z', '2026-08-20T10:00:00.000Z'
+    );
+
+    PRAGMA user_version = 3;
+  `);
+  versionThreeDatabase.close();
+
+  try {
+    const repository = createRepository(databasePath);
+    const existingPlayer = repository.getPlayer("guild-1", "user-1");
+
+    assert.equal(existingPlayer.discordUserId, "user-1");
+    assert.equal(existingPlayer.accountId, "account-1");
+    assert.equal(existingPlayer.playerName, "PlayerOne");
+    assert.equal(existingPlayer.displayName, null);
+    assert.equal(existingPlayer.createdAt, "2026-08-20T10:00:00.000Z");
+    assert.equal(
+      repository.database.prepare("PRAGMA user_version;").get().user_version,
+      4,
+    );
+
+    repository.upsertPlayer({
+      guildId: "guild-1",
+      discordUserId: "user-1",
+      accountId: "account-1",
+      playerName: "PlayerOne",
+      displayName: "민재",
+      platform: "steam",
+    });
+
+    const updatedPlayer = repository.getPlayer("guild-1", "user-1");
+    assert.equal(updatedPlayer.displayName, "민재");
+    assert.equal(updatedPlayer.accountId, "account-1");
+    assert.equal(updatedPlayer.createdAt, "2026-08-20T10:00:00.000Z");
+    assert.equal(
+      repository.database
+        .prepare("SELECT COUNT(*) AS count FROM registered_players")
+        .get().count,
+      1,
+    );
+    repository.close();
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });
   }

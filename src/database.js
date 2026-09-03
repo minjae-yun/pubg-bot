@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const DATA_PARSER_VERSION = 1;
 
 const REGISTERED_PLAYERS_SCHEMA = `
@@ -11,6 +11,7 @@ const REGISTERED_PLAYERS_SCHEMA = `
     discord_user_id TEXT NOT NULL,
     pubg_account_id TEXT NOT NULL,
     pubg_name TEXT NOT NULL,
+    display_name TEXT,
     platform TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -269,6 +270,13 @@ function getSchemaVersion(database) {
   return Number(database.prepare("PRAGMA user_version;").get().user_version);
 }
 
+function hasRegisteredPlayerDisplayName(database) {
+  return database
+    .prepare("PRAGMA table_info(registered_players);")
+    .all()
+    .some((column) => column.name === "display_name");
+}
+
 function createCurrentSchema(database) {
   database.exec(`
     ${REGISTERED_PLAYERS_SCHEMA}
@@ -301,6 +309,26 @@ function migrateVersion2To3(database) {
     database.exec(`
       BEGIN IMMEDIATE;
       ${KILL_RACE_SCHEMA}
+      PRAGMA user_version = 3;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) {
+      database.exec("ROLLBACK;");
+    }
+    throw error;
+  }
+}
+
+function migrateVersion3To4(database) {
+  const addDisplayNameColumn = hasRegisteredPlayerDisplayName(database)
+    ? ""
+    : "ALTER TABLE registered_players ADD COLUMN display_name TEXT;";
+
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${addDisplayNameColumn}
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
     `);
@@ -313,11 +341,16 @@ function migrateVersion2To3(database) {
 }
 
 function migrateLegacyPartySchema(database) {
+  const addDisplayNameColumn = hasRegisteredPlayerDisplayName(database)
+    ? ""
+    : "ALTER TABLE registered_players ADD COLUMN display_name TEXT;";
   database.exec("PRAGMA foreign_keys = OFF;");
 
   try {
     database.exec(`
       BEGIN IMMEDIATE;
+
+      ${addDisplayNameColumn}
 
       DROP INDEX IF EXISTS active_party_per_channel;
       ALTER TABLE party_members RENAME TO party_members_legacy;
@@ -399,6 +432,11 @@ function initializeDatabase(database) {
 
   if (currentVersion === 2) {
     migrateVersion2To3(database);
+    currentVersion = 3;
+  }
+
+  if (currentVersion === 3) {
+    migrateVersion3To4(database);
     return;
   }
 
@@ -426,20 +464,40 @@ export class BotRepository {
     this.database = database;
   }
 
-  upsertPlayer({ guildId, discordUserId, accountId, playerName, platform }) {
+  upsertPlayer({
+    guildId,
+    discordUserId,
+    accountId,
+    playerName,
+    displayName,
+    platform,
+  }) {
     const now = new Date().toISOString();
+    const normalizedDisplayName =
+      typeof displayName === "string" ? displayName.trim() || null : null;
     this.database
       .prepare(`
         INSERT INTO registered_players (
-          guild_id, discord_user_id, pubg_account_id, pubg_name, platform, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          guild_id, discord_user_id, pubg_account_id, pubg_name, display_name,
+          platform, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (guild_id, discord_user_id) DO UPDATE SET
           pubg_account_id = excluded.pubg_account_id,
           pubg_name = excluded.pubg_name,
+          display_name = COALESCE(excluded.display_name, display_name),
           platform = excluded.platform,
           updated_at = excluded.updated_at
       `)
-      .run(guildId, discordUserId, accountId, playerName, platform, now, now);
+      .run(
+        guildId,
+        discordUserId,
+        accountId,
+        playerName,
+        normalizedDisplayName,
+        platform,
+        now,
+        now,
+      );
 
     return this.getPlayer(guildId, discordUserId);
   }
@@ -452,6 +510,7 @@ export class BotRepository {
           discord_user_id AS discordUserId,
           pubg_account_id AS accountId,
           pubg_name AS playerName,
+          display_name AS displayName,
           platform,
           created_at AS createdAt,
           updated_at AS updatedAt

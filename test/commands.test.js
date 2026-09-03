@@ -40,6 +40,14 @@ test("등록과 파티 명령어를 함께 제공한다", () => {
     [5, 10, 20],
   );
 
+  const registerCommand = commandBodies.find(
+    (command) => command.name === "등록",
+  );
+  assert.equal(registerCommand.options[0].name, "닉네임");
+  assert.equal(registerCommand.options[0].required, true);
+  assert.equal(registerCommand.options[1].name, "이름");
+  assert.equal(registerCommand.options[1].required, false);
+
   const killRaceCommand = commandBodies.find(
     (command) => command.name === "킬내기시작",
   );
