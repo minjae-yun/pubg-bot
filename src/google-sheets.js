@@ -111,7 +111,7 @@ export class GoogleSheetsClient {
     values.push(result.chicken ? 1 : 0);
 
     await this.batchUpdate([
-      valueRange(sheet, `B${row}`, [[formatMapName(result.mapName)]]),
+      valueRange(sheet, `B${row}`, [[sheetText(formatMapName(result.mapName))]]),
       valueRange(
         sheet,
         `${columns.start}${row}:${columns.chicken}${row}`,
@@ -156,7 +156,7 @@ function setupRanges(sheet, startColumn, teamKey, members, rowCount) {
   const startCode = startColumn.charCodeAt(0);
   const valueColumn = String.fromCharCode(startCode + 1);
   const names = Array.from({ length: rowCount }, (_, index) => [
-    members[index]?.displayName ?? "",
+    sheetText(members[index]?.displayName ?? ""),
   ]);
 
   return [
@@ -167,6 +167,11 @@ function setupRanges(sheet, startColumn, teamKey, members, rowCount) {
 
 function valueRange(sheet, range, values) {
   return { range: `'${sheet}'!${range}`, values };
+}
+
+function sheetText(value) {
+  const text = String(value);
+  return /^[=+@-]/.test(text) ? `'${text}` : text;
 }
 
 function createServiceAccountTokenProvider({ credentials, fetchImpl }) {

@@ -8,6 +8,11 @@ import {
   statsCommand,
 } from "./commands.js";
 import {
+  handleKillRaceButton,
+  handleKillRaceCommand,
+  KillRaceUserError,
+} from "./kill-race-interactions.js";
+import {
   buildMissionDetailEmbed,
   buildPartyActiveEmbed,
   buildPartyButtons,
@@ -43,6 +48,7 @@ export function createInteractionHandler({
   repository,
   allowedChannelId = "",
   dataCollector,
+  killRaceService,
 }) {
   return async function handleInteraction(interaction) {
     try {
@@ -60,12 +66,23 @@ export function createInteractionHandler({
           return;
         }
 
-        await handleCommand(interaction, pubgApi, repository, dataCollector);
+        await handleCommand(
+          interaction,
+          pubgApi,
+          repository,
+          dataCollector,
+          killRaceService,
+        );
         return;
       }
 
       if (interaction.isButton() && interaction.customId.startsWith("party:")) {
         await handlePartyButton(interaction, pubgApi, repository, dataCollector);
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith("killrace:")) {
+        await handleKillRaceButton(interaction, { repository, killRaceService });
       }
     } catch (error) {
       if (!(error instanceof InteractionAlreadyHandledError)) {
@@ -82,7 +99,19 @@ export function createInteractionHandler({
   };
 }
 
-async function handleCommand(interaction, pubgApi, repository, dataCollector) {
+async function handleCommand(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+  killRaceService,
+) {
+  if (
+    await handleKillRaceCommand(interaction, { repository, killRaceService })
+  ) {
+    return;
+  }
+
   switch (interaction.commandName) {
     case statsCommand.name:
       await handleStats(interaction, pubgApi, repository);
@@ -797,7 +826,7 @@ async function respondWithError(interaction, error) {
 }
 
 function userFacingError(error) {
-  if (error instanceof UserInputError) {
+  if (error instanceof UserInputError || error instanceof KillRaceUserError) {
     return error.message;
   }
 

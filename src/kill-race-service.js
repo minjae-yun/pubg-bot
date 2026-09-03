@@ -5,10 +5,17 @@ import {
 } from "./kill-race-scoring.js";
 
 export class KillRaceService {
-  constructor({ pubgApi, repository, sheets, refreshIntervalMs = 60_000 }) {
+  constructor({
+    pubgApi,
+    repository,
+    sheets,
+    sheetUrl,
+    refreshIntervalMs = 60_000,
+  }) {
     this.pubgApi = pubgApi;
     this.repository = repository;
     this.sheets = sheets;
+    this.sheetUrl = sheetUrl;
     this.refreshIntervalMs = refreshIntervalMs;
     this.locks = new Map();
     this.timer = undefined;
@@ -16,6 +23,19 @@ export class KillRaceService {
 
   isConfigured() {
     return Boolean(this.sheets);
+  }
+
+  getSheetReference() {
+    if (!this.sheets) {
+      return undefined;
+    }
+
+    return {
+      sheetId: this.sheets.sheetId,
+      sheetUrl:
+        this.sheetUrl ||
+        `https://docs.google.com/spreadsheets/d/${this.sheets.sheetId}/edit`,
+    };
   }
 
   async startSession(sessionId) {
