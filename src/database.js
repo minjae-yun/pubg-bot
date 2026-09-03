@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const DATA_PARSER_VERSION = 1;
 
 const REGISTERED_PLAYERS_SCHEMA = `
@@ -71,6 +71,77 @@ const PARTY_MISSIONS_SCHEMA = `
       REFERENCES party_missions(session_id, mission_key)
       ON DELETE CASCADE
   );
+`;
+
+const KILL_RACE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS kill_race_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    owner_user_id TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('2v2', '3v3', '4v4', '2v2v2')),
+    target_score INTEGER NOT NULL CHECK (target_score > 0),
+    sheet_id TEXT NOT NULL,
+    sheet_url TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT,
+    last_synced_at TEXT,
+    status TEXT NOT NULL CHECK (status IN ('recruiting', 'active', 'completed'))
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS open_kill_race_per_channel
+    ON kill_race_sessions (guild_id, channel_id)
+    WHERE status IN ('recruiting', 'active');
+
+  CREATE TABLE IF NOT EXISTS kill_race_members (
+    session_id INTEGER NOT NULL REFERENCES kill_race_sessions(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL,
+    team_key TEXT NOT NULL CHECK (team_key IN ('A', 'B', 'C')),
+    slot INTEGER NOT NULL CHECK (slot BETWEEN 1 AND 4),
+    display_name TEXT NOT NULL,
+    pubg_account_id TEXT NOT NULL,
+    pubg_name TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, discord_user_id),
+    UNIQUE (session_id, team_key, slot)
+  );
+
+  CREATE TABLE IF NOT EXISTS kill_race_baseline_matches (
+    session_id INTEGER NOT NULL REFERENCES kill_race_sessions(id) ON DELETE CASCADE,
+    match_id TEXT NOT NULL,
+    PRIMARY KEY (session_id, match_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS kill_race_team_matches (
+    session_id INTEGER NOT NULL REFERENCES kill_race_sessions(id) ON DELETE CASCADE,
+    team_key TEXT NOT NULL CHECK (team_key IN ('A', 'B', 'C')),
+    match_id TEXT NOT NULL,
+    round_number INTEGER NOT NULL CHECK (round_number BETWEEN 1 AND 20),
+    map_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    chicken INTEGER NOT NULL DEFAULT 0 CHECK (chicken IN (0, 1)),
+    sheet_synced INTEGER NOT NULL DEFAULT 0 CHECK (sheet_synced IN (0, 1)),
+    recorded_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, team_key, match_id),
+    UNIQUE (session_id, team_key, round_number)
+  );
+
+  CREATE TABLE IF NOT EXISTS kill_race_player_results (
+    session_id INTEGER NOT NULL REFERENCES kill_race_sessions(id) ON DELETE CASCADE,
+    team_key TEXT NOT NULL CHECK (team_key IN ('A', 'B', 'C')),
+    match_id TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    kills INTEGER NOT NULL DEFAULT 0 CHECK (kills >= 0),
+    died INTEGER NOT NULL DEFAULT 0 CHECK (died IN (0, 1)),
+    PRIMARY KEY (session_id, team_key, match_id, discord_user_id),
+    FOREIGN KEY (session_id, team_key, match_id)
+      REFERENCES kill_race_team_matches(session_id, team_key, match_id)
+      ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS kill_race_team_matches_session_created
+    ON kill_race_team_matches (session_id, created_at);
 `;
 
 const DATA_COLLECTION_SCHEMA = `
@@ -204,6 +275,7 @@ function createCurrentSchema(database) {
     ${PARTY_SESSIONS_SCHEMA}
     ${PARTY_MEMBERS_SCHEMA}
     ${PARTY_MISSIONS_SCHEMA}
+    ${KILL_RACE_SCHEMA}
     ${DATA_COLLECTION_SCHEMA}
   `);
 }
@@ -213,6 +285,22 @@ function migrateVersion1To2(database) {
     database.exec(`
       BEGIN IMMEDIATE;
       ${DATA_COLLECTION_SCHEMA}
+      PRAGMA user_version = 2;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) {
+      database.exec("ROLLBACK;");
+    }
+    throw error;
+  }
+}
+
+function migrateVersion2To3(database) {
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${KILL_RACE_SCHEMA}
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
     `);
@@ -267,6 +355,7 @@ function migrateLegacyPartySchema(database) {
       DROP TABLE party_sessions_legacy;
 
       ${PARTY_MISSIONS_SCHEMA}
+      ${KILL_RACE_SCHEMA}
       ${DATA_COLLECTION_SCHEMA}
 
       PRAGMA user_version = ${SCHEMA_VERSION};
@@ -290,7 +379,7 @@ function migrateLegacyPartySchema(database) {
 function initializeDatabase(database) {
   database.exec(REGISTERED_PLAYERS_SCHEMA);
 
-  const currentVersion = getSchemaVersion(database);
+  let currentVersion = getSchemaVersion(database);
   if (currentVersion > SCHEMA_VERSION) {
     throw new Error(
       `지원하지 않는 SQLite 스키마 버전입니다. ` +
@@ -305,6 +394,11 @@ function initializeDatabase(database) {
 
   if (currentVersion === 1) {
     migrateVersion1To2(database);
+    currentVersion = 2;
+  }
+
+  if (currentVersion === 2) {
+    migrateVersion2To3(database);
     return;
   }
 
@@ -689,6 +783,532 @@ export class BotRepository {
         ORDER BY m.joined_at ASC
       `)
       .all(sessionId);
+  }
+
+  createKillRaceSession({
+    guildId,
+    channelId,
+    ownerUserId,
+    mode,
+    targetScore,
+    sheetId,
+    sheetUrl,
+    ownerMember,
+  }) {
+    const openSession = this.getOpenKillRaceSession(guildId, channelId);
+
+    if (openSession) {
+      return { session: openSession, created: false };
+    }
+
+    const now = new Date().toISOString();
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      const result = this.database
+        .prepare(`
+          INSERT INTO kill_race_sessions (
+            guild_id, channel_id, owner_user_id, mode, target_score,
+            sheet_id, sheet_url, created_at, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'recruiting')
+        `)
+        .run(
+          guildId,
+          channelId,
+          ownerUserId,
+          mode,
+          targetScore,
+          sheetId,
+          sheetUrl,
+          now,
+        );
+      const sessionId = Number(result.lastInsertRowid);
+
+      this.database
+        .prepare(`
+          INSERT INTO kill_race_members (
+            session_id, discord_user_id, team_key, slot, display_name,
+            pubg_account_id, pubg_name, joined_at
+          ) VALUES (?, ?, 'A', 1, ?, ?, ?, ?)
+        `)
+        .run(
+          sessionId,
+          ownerMember.discordUserId,
+          ownerMember.displayName,
+          ownerMember.accountId,
+          ownerMember.playerName,
+          now,
+        );
+      this.database.exec("COMMIT;");
+      return { session: this.getKillRaceSession(sessionId), created: true };
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
+  }
+
+  getKillRaceSession(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT
+          id,
+          guild_id AS guildId,
+          channel_id AS channelId,
+          owner_user_id AS ownerUserId,
+          mode,
+          target_score AS targetScore,
+          sheet_id AS sheetId,
+          sheet_url AS sheetUrl,
+          created_at AS createdAt,
+          started_at AS startedAt,
+          ended_at AS endedAt,
+          last_synced_at AS lastSyncedAt,
+          status
+        FROM kill_race_sessions
+        WHERE id = ?
+      `)
+      .get(sessionId);
+  }
+
+  getOpenKillRaceSession(guildId, channelId) {
+    return this.database
+      .prepare(`
+        SELECT
+          id,
+          guild_id AS guildId,
+          channel_id AS channelId,
+          owner_user_id AS ownerUserId,
+          mode,
+          target_score AS targetScore,
+          sheet_id AS sheetId,
+          sheet_url AS sheetUrl,
+          created_at AS createdAt,
+          started_at AS startedAt,
+          ended_at AS endedAt,
+          last_synced_at AS lastSyncedAt,
+          status
+        FROM kill_race_sessions
+        WHERE guild_id = ?
+          AND channel_id = ?
+          AND status IN ('recruiting', 'active')
+        LIMIT 1
+      `)
+      .get(guildId, channelId);
+  }
+
+  getActiveKillRaceSessions() {
+    return this.database
+      .prepare(`
+        SELECT
+          id,
+          guild_id AS guildId,
+          channel_id AS channelId,
+          owner_user_id AS ownerUserId,
+          mode,
+          target_score AS targetScore,
+          sheet_id AS sheetId,
+          sheet_url AS sheetUrl,
+          created_at AS createdAt,
+          started_at AS startedAt,
+          ended_at AS endedAt,
+          last_synced_at AS lastSyncedAt,
+          status
+        FROM kill_race_sessions
+        WHERE status = 'active'
+        ORDER BY started_at ASC
+      `)
+      .all();
+  }
+
+  getKillRaceMembers(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT
+          session_id AS sessionId,
+          discord_user_id AS discordUserId,
+          team_key AS teamKey,
+          slot,
+          display_name AS displayName,
+          pubg_account_id AS accountId,
+          pubg_name AS playerName,
+          joined_at AS joinedAt
+        FROM kill_race_members
+        WHERE session_id = ?
+        ORDER BY team_key ASC, slot ASC
+      `)
+      .all(sessionId);
+  }
+
+  setKillRaceMemberTeam({ sessionId, teamKey, maxTeamSize, member }) {
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      const session = this.database
+        .prepare("SELECT status FROM kill_race_sessions WHERE id = ?")
+        .get(sessionId);
+
+      if (session?.status !== "recruiting") {
+        this.database.exec("ROLLBACK;");
+        return { changed: false, reason: "closed" };
+      }
+
+      const existing = this.database
+        .prepare(`
+          SELECT team_key AS teamKey, slot
+          FROM kill_race_members
+          WHERE session_id = ? AND discord_user_id = ?
+        `)
+        .get(sessionId, member.discordUserId);
+
+      if (existing?.teamKey === teamKey) {
+        this.database.exec("ROLLBACK;");
+        return { changed: false, reason: "already" };
+      }
+
+      const occupiedSlots = new Set(
+        this.database
+          .prepare(`
+            SELECT slot
+            FROM kill_race_members
+            WHERE session_id = ? AND team_key = ?
+          `)
+          .all(sessionId, teamKey)
+          .map((row) => row.slot),
+      );
+      const slot = Array.from(
+        { length: maxTeamSize },
+        (_, index) => index + 1,
+      ).find((candidate) => !occupiedSlots.has(candidate));
+
+      if (!slot) {
+        this.database.exec("ROLLBACK;");
+        return { changed: false, reason: "full" };
+      }
+
+      this.database
+        .prepare(`
+          INSERT INTO kill_race_members (
+            session_id, discord_user_id, team_key, slot, display_name,
+            pubg_account_id, pubg_name, joined_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (session_id, discord_user_id) DO UPDATE SET
+            team_key = excluded.team_key,
+            slot = excluded.slot,
+            display_name = excluded.display_name,
+            pubg_account_id = excluded.pubg_account_id,
+            pubg_name = excluded.pubg_name
+        `)
+        .run(
+          sessionId,
+          member.discordUserId,
+          teamKey,
+          slot,
+          member.displayName,
+          member.accountId,
+          member.playerName,
+          new Date().toISOString(),
+        );
+      this.database.exec("COMMIT;");
+      return { changed: true, reason: existing ? "moved" : "joined" };
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
+  }
+
+  startKillRaceSession(sessionId, baselineMatchIds = []) {
+    const startedAt = new Date().toISOString();
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      const result = this.database
+        .prepare(`
+          UPDATE kill_race_sessions
+          SET status = 'active', started_at = ?, last_synced_at = ?
+          WHERE id = ? AND status = 'recruiting'
+        `)
+        .run(startedAt, startedAt, sessionId);
+
+      if (result.changes === 0) {
+        this.database.exec("ROLLBACK;");
+        return undefined;
+      }
+
+      const insertBaseline = this.database.prepare(`
+        INSERT OR IGNORE INTO kill_race_baseline_matches (session_id, match_id)
+        VALUES (?, ?)
+      `);
+      for (const matchId of new Set(baselineMatchIds.filter(Boolean))) {
+        insertBaseline.run(sessionId, matchId);
+      }
+
+      this.database.exec("COMMIT;");
+      return this.getKillRaceSession(sessionId);
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
+  }
+
+  getKillRaceBaselineMatchIds(sessionId) {
+    return this.database
+      .prepare(`
+        SELECT match_id AS matchId
+        FROM kill_race_baseline_matches
+        WHERE session_id = ?
+      `)
+      .all(sessionId)
+      .map((row) => row.matchId);
+  }
+
+  getKillRaceRecordedMatchIds(sessionId, teamKey) {
+    return this.database
+      .prepare(`
+        SELECT match_id AS matchId
+        FROM kill_race_team_matches
+        WHERE session_id = ? AND team_key = ?
+      `)
+      .all(sessionId, teamKey)
+      .map((row) => row.matchId);
+  }
+
+  addKillRaceTeamMatch({
+    sessionId,
+    teamKey,
+    matchId,
+    mapName,
+    createdAt,
+    chicken,
+    players,
+  }) {
+    const recordedAt = new Date().toISOString();
+    this.database.exec("BEGIN IMMEDIATE;");
+
+    try {
+      const existing = this.database
+        .prepare(`
+          SELECT round_number AS roundNumber
+          FROM kill_race_team_matches
+          WHERE session_id = ? AND team_key = ? AND match_id = ?
+        `)
+        .get(sessionId, teamKey, matchId);
+
+      if (existing) {
+        this.database.exec("ROLLBACK;");
+        return { created: false, roundNumber: existing.roundNumber };
+      }
+
+      const session = this.database
+        .prepare("SELECT status FROM kill_race_sessions WHERE id = ?")
+        .get(sessionId);
+      if (session?.status !== "active") {
+        this.database.exec("ROLLBACK;");
+        return { created: false, reason: "closed" };
+      }
+
+      const row = this.database
+        .prepare(`
+          SELECT COALESCE(MAX(round_number), 0) + 1 AS roundNumber
+          FROM kill_race_team_matches
+          WHERE session_id = ? AND team_key = ?
+        `)
+        .get(sessionId, teamKey);
+      const roundNumber = Number(row.roundNumber);
+
+      if (roundNumber > 20) {
+        this.database.exec("ROLLBACK;");
+        return { created: false, reason: "sheet-full" };
+      }
+
+      this.database
+        .prepare(`
+          INSERT INTO kill_race_team_matches (
+            session_id, team_key, match_id, round_number, map_name,
+            created_at, chicken, recorded_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          sessionId,
+          teamKey,
+          matchId,
+          roundNumber,
+          mapName,
+          createdAt,
+          chicken ? 1 : 0,
+          recordedAt,
+        );
+
+      const insertPlayer = this.database.prepare(`
+        INSERT INTO kill_race_player_results (
+          session_id, team_key, match_id, discord_user_id, kills, died
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const player of players) {
+        insertPlayer.run(
+          sessionId,
+          teamKey,
+          matchId,
+          player.discordUserId,
+          player.kills,
+          player.died ? 1 : 0,
+        );
+      }
+
+      this.database.exec("COMMIT;");
+      return { created: true, roundNumber };
+    } catch (error) {
+      if (this.database.isTransaction) {
+        this.database.exec("ROLLBACK;");
+      }
+      throw error;
+    }
+  }
+
+  getPendingKillRaceSheetRows(sessionId) {
+    const matches = this.database
+      .prepare(`
+        SELECT
+          session_id AS sessionId,
+          team_key AS teamKey,
+          match_id AS matchId,
+          round_number AS roundNumber,
+          map_name AS mapName,
+          created_at AS createdAt,
+          chicken
+        FROM kill_race_team_matches
+        WHERE session_id = ? AND sheet_synced = 0
+        ORDER BY created_at ASC, team_key ASC
+      `)
+      .all(sessionId);
+    const getPlayers = this.database.prepare(`
+      SELECT
+        results.discord_user_id AS discordUserId,
+        members.slot,
+        results.kills,
+        results.died
+      FROM kill_race_player_results AS results
+      JOIN kill_race_members AS members
+        ON members.session_id = results.session_id
+        AND members.discord_user_id = results.discord_user_id
+      WHERE results.session_id = ?
+        AND results.team_key = ?
+        AND results.match_id = ?
+      ORDER BY members.slot ASC
+    `);
+
+    return matches.map((match) => ({
+      ...match,
+      chicken: Boolean(match.chicken),
+      players: getPlayers.all(sessionId, match.teamKey, match.matchId).map(
+        (player) => ({ ...player, died: Boolean(player.died) }),
+      ),
+    }));
+  }
+
+  markKillRaceSheetRowSynced(sessionId, teamKey, matchId) {
+    const result = this.database
+      .prepare(`
+        UPDATE kill_race_team_matches
+        SET sheet_synced = 1
+        WHERE session_id = ? AND team_key = ? AND match_id = ?
+      `)
+      .run(sessionId, teamKey, matchId);
+
+    return result.changes > 0;
+  }
+
+  touchKillRaceSync(sessionId, syncedAt = new Date().toISOString()) {
+    this.database
+      .prepare(`
+        UPDATE kill_race_sessions
+        SET last_synced_at = ?
+        WHERE id = ? AND status = 'active'
+      `)
+      .run(syncedAt, sessionId);
+  }
+
+  getKillRaceSummary(sessionId) {
+    const session = this.getKillRaceSession(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const members = this.database
+      .prepare(`
+        SELECT
+          members.discord_user_id AS discordUserId,
+          members.team_key AS teamKey,
+          members.slot,
+          members.display_name AS displayName,
+          members.pubg_account_id AS accountId,
+          members.pubg_name AS playerName,
+          COALESCE(SUM(results.kills), 0) AS kills,
+          COALESCE(SUM(results.died), 0) AS deaths
+        FROM kill_race_members AS members
+        LEFT JOIN kill_race_player_results AS results
+          ON results.session_id = members.session_id
+          AND results.discord_user_id = members.discord_user_id
+        WHERE members.session_id = ?
+        GROUP BY members.session_id, members.discord_user_id
+        ORDER BY members.team_key ASC, members.slot ASC
+      `)
+      .all(sessionId)
+      .map((member) => ({
+        ...member,
+        score: Number(member.kills) - Number(member.deaths) * 2,
+      }));
+    const matchTotals = this.database
+      .prepare(`
+        SELECT
+          team_key AS teamKey,
+          COUNT(*) AS rounds,
+          COALESCE(SUM(chicken), 0) AS chickens
+        FROM kill_race_team_matches
+        WHERE session_id = ?
+        GROUP BY team_key
+      `)
+      .all(sessionId);
+    const totalsByTeam = new Map(
+      matchTotals.map((team) => [team.teamKey, team]),
+    );
+    const teamKeys = session.mode === "2v2v2" ? ["A", "B", "C"] : ["A", "B"];
+    const teams = teamKeys.map((teamKey) => {
+      const players = members.filter((member) => member.teamKey === teamKey);
+      const matchTotal = totalsByTeam.get(teamKey);
+      const kills = players.reduce((sum, player) => sum + Number(player.kills), 0);
+      const deaths = players.reduce((sum, player) => sum + Number(player.deaths), 0);
+      const chickens = Number(matchTotal?.chickens ?? 0);
+
+      return {
+        teamKey,
+        rounds: Number(matchTotal?.rounds ?? 0),
+        kills,
+        deaths,
+        chickens,
+        score: kills - deaths * 2 + chickens * 8,
+        players,
+      };
+    });
+
+    return { session, teams };
+  }
+
+  completeKillRaceSession(sessionId) {
+    const result = this.database
+      .prepare(`
+        UPDATE kill_race_sessions
+        SET status = 'completed', ended_at = ?
+        WHERE id = ? AND status IN ('recruiting', 'active')
+      `)
+      .run(new Date().toISOString(), sessionId);
+
+    return result.changes > 0;
   }
 
   saveCollectedMatch(sessionId, dataset, archive = {}) {

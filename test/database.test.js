@@ -6,6 +6,128 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createRepository } from "../src/database.js";
 
+test("일반 파티와 별개로 킬내기 팀과 점수를 저장한다", () => {
+  const repository = createRepository(":memory:");
+  const owner = {
+    discordUserId: "owner-1",
+    displayName: "민재",
+    accountId: "account-owner",
+    playerName: "PUBGOwner",
+  };
+  const member = {
+    discordUserId: "member-1",
+    displayName: "승환",
+    accountId: "account-member",
+    playerName: "PUBGMember",
+  };
+  const party = repository.createPartySession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: owner.discordUserId,
+  });
+  const race = repository.createKillRaceSession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: owner.discordUserId,
+    mode: "2v2",
+    targetScore: 30,
+    sheetId: "sheet-1",
+    sheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit",
+    ownerMember: owner,
+  });
+
+  assert.equal(party.created, true);
+  assert.equal(race.created, true);
+  assert.equal(race.session.status, "recruiting");
+  assert.deepEqual(
+    repository.getKillRaceMembers(race.session.id).map((player) => [
+      player.discordUserId,
+      player.teamKey,
+      player.slot,
+    ]),
+    [["owner-1", "A", 1]],
+  );
+  assert.deepEqual(
+    repository.setKillRaceMemberTeam({
+      sessionId: race.session.id,
+      teamKey: "B",
+      maxTeamSize: 2,
+      member,
+    }),
+    { changed: true, reason: "joined" },
+  );
+  assert.equal(
+    repository.setKillRaceMemberTeam({
+      sessionId: race.session.id,
+      teamKey: "A",
+      maxTeamSize: 2,
+      member,
+    }).reason,
+    "moved",
+  );
+  repository.setKillRaceMemberTeam({
+    sessionId: race.session.id,
+    teamKey: "B",
+    maxTeamSize: 2,
+    member,
+  });
+
+  const started = repository.startKillRaceSession(race.session.id, [
+    "old-match-1",
+    "old-match-2",
+  ]);
+  assert.equal(started.status, "active");
+  assert.deepEqual(
+    repository.getKillRaceBaselineMatchIds(race.session.id).sort(),
+    ["old-match-1", "old-match-2"],
+  );
+
+  const recorded = repository.addKillRaceTeamMatch({
+    sessionId: race.session.id,
+    teamKey: "A",
+    matchId: "new-match-1",
+    mapName: "Savage_Main",
+    createdAt: "2026-09-03T03:00:00.000Z",
+    chicken: true,
+    players: [
+      { discordUserId: owner.discordUserId, kills: 4, died: true },
+    ],
+  });
+  assert.deepEqual(recorded, { created: true, roundNumber: 1 });
+  assert.equal(
+    repository.addKillRaceTeamMatch({
+      sessionId: race.session.id,
+      teamKey: "A",
+      matchId: "new-match-1",
+      mapName: "Savage_Main",
+      createdAt: "2026-09-03T03:00:00.000Z",
+      chicken: true,
+      players: [{ discordUserId: owner.discordUserId, kills: 4, died: true }],
+    }).created,
+    false,
+  );
+
+  const pending = repository.getPendingKillRaceSheetRows(race.session.id);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].players[0].died, true);
+  repository.markKillRaceSheetRowSynced(
+    race.session.id,
+    "A",
+    "new-match-1",
+  );
+  assert.equal(repository.getPendingKillRaceSheetRows(race.session.id).length, 0);
+
+  const summary = repository.getKillRaceSummary(race.session.id);
+  assert.equal(summary.teams[0].kills, 4);
+  assert.equal(summary.teams[0].deaths, 1);
+  assert.equal(summary.teams[0].chickens, 1);
+  assert.equal(summary.teams[0].score, 10);
+  assert.equal(summary.teams[0].players[0].score, 2);
+  assert.equal(repository.completeKillRaceSession(race.session.id), true);
+  assert.equal(repository.getKillRaceSession(race.session.id).status, "completed");
+  repository.close();
+});
+
 test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   const repository = createRepository(":memory:");
 
@@ -281,7 +403,7 @@ test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전
     assert.equal(repository.getPartyMembers(7)[0].playerName, "PlayerOne");
     assert.equal(
       repository.database.prepare("PRAGMA user_version;").get().user_version,
-      2,
+      3,
     );
     assert.deepEqual(repository.database.prepare("PRAGMA foreign_key_check;").all(), []);
 
@@ -338,7 +460,7 @@ test("스키마 V1 데이터를 보존하면서 사녹 수집 테이블을 추�
 
     assert.equal(
       migratedRepository.database.prepare("PRAGMA user_version;").get().user_version,
-      2,
+      3,
     );
     assert.equal(
       migratedRepository.getPlayer("guild-1", "user-1").playerName,
