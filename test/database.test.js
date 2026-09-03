@@ -121,10 +121,58 @@ test("일반 파티와 별개로 킬내기 팀과 점수를 저장한다", () =>
   assert.equal(summary.teams[0].kills, 4);
   assert.equal(summary.teams[0].deaths, 1);
   assert.equal(summary.teams[0].chickens, 1);
-  assert.equal(summary.teams[0].score, 10);
-  assert.equal(summary.teams[0].players[0].score, 2);
+  assert.equal(summary.teams[0].score, 11);
+  assert.equal(summary.teams[0].players[0].score, 3);
   assert.equal(repository.completeKillRaceSession(race.session.id), true);
   assert.equal(repository.getKillRaceSession(race.session.id).status, "completed");
+  repository.close();
+});
+
+test("킬내기 참가 순서에 따라 티어별 킬 점수를 계산한다", () => {
+  const repository = createRepository(":memory:");
+  const members = [
+    { discordUserId: "tier-1", displayName: "1티어", accountId: "account-1", playerName: "One" },
+    { discordUserId: "tier-2", displayName: "2티어", accountId: "account-2", playerName: "Two" },
+    { discordUserId: "tier-3", displayName: "3티어", accountId: "account-3", playerName: "Three" },
+    { discordUserId: "tier-4", displayName: "4티어", accountId: "account-4", playerName: "Four" },
+  ];
+  const { session } = repository.createKillRaceSession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: members[0].discordUserId,
+    mode: "4v4",
+    targetScore: 30,
+    sheetId: "sheet-1",
+    sheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit",
+    ownerMember: members[0],
+  });
+  for (const member of members.slice(1)) {
+    repository.setKillRaceMemberTeam({
+      sessionId: session.id,
+      teamKey: "A",
+      maxTeamSize: 4,
+      member,
+    });
+  }
+  repository.startKillRaceSession(session.id);
+  repository.addKillRaceTeamMatch({
+    sessionId: session.id,
+    teamKey: "A",
+    matchId: "tier-match",
+    mapName: "Savage_Main",
+    createdAt: "2026-09-04T03:00:00.000Z",
+    chicken: false,
+    players: members.map((member) => ({
+      discordUserId: member.discordUserId,
+      kills: 1,
+      died: true,
+    })),
+  });
+
+  const team = repository.getKillRaceSummary(session.id).teams[0];
+  assert.deepEqual(team.players.map((player) => player.tier), [1, 2, 3, 4]);
+  assert.deepEqual(team.players.map((player) => player.score), [0, 1, 2, 3]);
+  assert.equal(team.score, 6);
   repository.close();
 });
 

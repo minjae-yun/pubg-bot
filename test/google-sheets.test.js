@@ -23,7 +23,14 @@ test("3대3 참가자와 점수 규칙을 2팀 입력 시트에 초기화한다"
     requests[1].body.data.map((range) => [range.range, range.values]),
   );
   assert.deepEqual(updates.get("'2팀 입력'!E3"), [[30]]);
-  assert.match(updates.get("'2팀 입력'!A12")[0][0], /블루칩으로 살아남으면 0/);
+  assert.deepEqual(updates.get("'2팀 입력'!K3"), [[-1]]);
+  assert.match(updates.get("'2팀 입력'!A12")[0][0], /블루칩으로 살아남거나 치킨이면/);
+  assert.deepEqual(updates.get("'2팀 입력'!A7:A10"), [
+    ["1티어"],
+    ["2티어"],
+    ["3티어"],
+    ["4티어"],
+  ]);
   assert.deepEqual(updates.get("'2팀 입력'!B7:B10"), [
     ["민재"],
     ["승환"],
@@ -36,6 +43,10 @@ test("3대3 참가자와 점수 규칙을 2팀 입력 시트에 초기화한다"
     ["성민"],
     [""],
   ]);
+  assert.match(updates.get("'2팀 점수판'!A4")[0][0], /\$H\$3\*1/);
+  assert.match(updates.get("'2팀 점수판'!A5")[0][0], /\$H\$3\*2/);
+  assert.match(updates.get("'2팀 점수판'!A6")[0][0], /\$H\$3\*3/);
+  assert.match(updates.get("'2팀 점수판'!A7")[0][0], /\$H\$3\*4/);
 });
 
 test("팀별 경기 결과를 선수 슬롯에 맞춰 시트 한 행에 기록한다", async () => {

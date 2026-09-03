@@ -9,6 +9,10 @@ export const KILL_RACE_MODES = Object.freeze({
   },
 });
 
+export const KILL_RACE_TIER_KILL_POINTS = Object.freeze([1, 2, 3, 4]);
+export const KILL_RACE_DEATH_POINTS = -1;
+export const KILL_RACE_CHICKEN_POINTS = 8;
+
 const MAP_LABELS = Object.freeze({
   Baltic_Main: "에란겔",
   Chimera_Main: "파라모",
@@ -29,6 +33,26 @@ export function getKillRaceMode(mode) {
 
 export function formatKillRaceMode(mode) {
   return mode.replaceAll("v", "대");
+}
+
+export function getTierKillPoints(tier) {
+  return KILL_RACE_TIER_KILL_POINTS[Number(tier) - 1] ?? 0;
+}
+
+export function calculateKillRacePlayerScore({ kills, deaths, tier }) {
+  return (
+    Number(kills) * getTierKillPoints(tier) +
+    Number(deaths) * KILL_RACE_DEATH_POINTS
+  );
+}
+
+export function formatKillRaceScoring(mode) {
+  const playersPerTeam = getKillRaceMode(mode)?.playersPerTeam ?? 4;
+  const killRules = KILL_RACE_TIER_KILL_POINTS.slice(0, playersPerTeam)
+    .map((points, index) => `${index + 1}티어 **+${points}**`)
+    .join(" · ");
+
+  return `${killRules} · 최종 사망 **${KILL_RACE_DEATH_POINTS}** · 치킨 **+${KILL_RACE_CHICKEN_POINTS}**`;
 }
 
 export function formatMapName(mapName) {

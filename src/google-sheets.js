@@ -1,7 +1,13 @@
 import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { formatMapName, getKillRaceMode } from "./kill-race-config.js";
+import {
+  formatMapName,
+  getKillRaceMode,
+  KILL_RACE_CHICKEN_POINTS,
+  KILL_RACE_DEATH_POINTS,
+  KILL_RACE_TIER_KILL_POINTS,
+} from "./kill-race-config.js";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
@@ -66,12 +72,7 @@ export class GoogleSheetsClient {
     const data = [
       valueRange(sheet, "B3", [["킬내기"]]),
       valueRange(sheet, "E3", [[session.targetScore]]),
-      valueRange(sheet, "H3", [[1]]),
-      valueRange(sheet, "K3", [[-2]]),
-      valueRange(sheet, "N3", [[8]]),
-      valueRange(sheet, "A12", [[
-        "최종 사망 상태로 끝난 선수만 사망 칸에 1을 기록합니다. 블루칩으로 살아남으면 0으로 초기화되고, 치킨 경기에서는 전원 0입니다.",
-      ]]),
+      ...scoringRuleRanges(session.mode),
     ];
 
     if (session.mode === "2v2v2") {
@@ -88,6 +89,13 @@ export class GoogleSheetsClient {
     }
 
     await this.batchUpdate(data);
+  }
+
+  async updateScoringRules(mode) {
+    if (!getKillRaceMode(mode)) {
+      throw new Error(`지원하지 않는 킬내기 모드입니다: ${mode}`);
+    }
+    await this.batchUpdate(scoringRuleRanges(mode));
   }
 
   async writeTeamMatch(session, result) {
@@ -164,8 +172,145 @@ function setupRanges(sheet, startColumn, teamKey, members, rowCount) {
 
   return [
     valueRange(sheet, `${valueColumn}6`, [[`TEAM ${teamKey}`]]),
+    valueRange(
+      sheet,
+      `${startColumn}7:${startColumn}${6 + rowCount}`,
+      Array.from({ length: rowCount }, (_, index) => [`${index + 1}티어`]),
+    ),
     valueRange(sheet, `${valueColumn}7:${valueColumn}${6 + rowCount}`, names),
   ];
+}
+
+function scoringRuleRanges(mode) {
+  const isThreeTeam = mode === "2v2v2";
+  const inputSheet = isThreeTeam ? "3팀 입력" : "2팀 입력";
+  const scoreSheet = isThreeTeam ? "3팀 점수판" : "2팀 점수판";
+  const teams = isThreeTeam
+    ? [
+        scoreTeam("A", "B6", "A3", "A7", "A", ["C", "E"], ["D", "F"], "G", "H"),
+        scoreTeam("B", "E6", "D3", "D7", "D", ["I", "K"], ["J", "L"], "M", "N"),
+        scoreTeam("C", "H6", "G3", "G7", "G", ["O", "Q"], ["P", "R"], "S", "T"),
+      ]
+    : [
+        scoreTeam("A", "B6", "A3", "A8", "A", ["C", "E", "G", "I"], ["D", "F", "H", "J"], "K", "L"),
+        scoreTeam("B", "G6", "E3", "E8", "E", ["M", "O", "Q", "S"], ["N", "P", "R", "T"], "U", "V"),
+      ];
+  const tierRows = isThreeTeam
+    ? [
+        ["A7:A8", 2],
+        ["D7:D8", 2],
+        ["G7:G8", 2],
+      ]
+    : [
+        ["A7:A10", 4],
+        ["F7:F10", 4],
+      ];
+  const data = [
+    valueRange(inputSheet, "G3", [["1티어 킬"]]),
+    valueRange(inputSheet, "H3", [[KILL_RACE_TIER_KILL_POINTS[0]]]),
+    valueRange(inputSheet, "J3", [["사망 감점"]]),
+    valueRange(inputSheet, "K3", [[KILL_RACE_DEATH_POINTS]]),
+    valueRange(inputSheet, "M3", [["치킨 보너스"]]),
+    valueRange(inputSheet, "N3", [[KILL_RACE_CHICKEN_POINTS]]),
+    valueRange(inputSheet, "A12", [[
+      "위에서부터 1·2·3·4티어이며 킬당 +1·+2·+3·+4점입니다. 최종 사망은 -1점이고, 블루칩으로 살아남거나 치킨이면 사망 감점이 없습니다.",
+    ]]),
+    valueRange(
+      scoreSheet,
+      "A1",
+      [[`='${inputSheet}'!$B$3&" "&'${inputSheet}'!$E$3&"점"`]],
+    ),
+  ];
+
+  for (const [range, rowCount] of tierRows) {
+    data.push(
+      valueRange(
+        inputSheet,
+        range,
+        Array.from({ length: rowCount }, (_, index) => [`${index + 1}티어`]),
+      ),
+    );
+  }
+
+  for (const team of teams) {
+    data.push(
+      valueRange(scoreSheet, team.scoreCell, [[teamScoreFormula(inputSheet, team)]]),
+      valueRange(scoreSheet, team.chickenCell, [[chickenFormula(inputSheet, team.chickenColumn)]]),
+    );
+    for (let index = 0; index < team.killColumns.length; index += 1) {
+      data.push(
+        valueRange(
+          scoreSheet,
+          `${team.playerStartColumn}${4 + index}`,
+          [[playerScoreFormula(inputSheet, team, index)]],
+        ),
+      );
+    }
+  }
+
+  return data;
+}
+
+function scoreTeam(
+  teamKey,
+  teamNameCell,
+  scoreCell,
+  chickenCell,
+  playerStartColumn,
+  killColumns,
+  deathColumns,
+  chickenColumn,
+  bonusColumn,
+) {
+  return {
+    teamKey,
+    teamNameCell,
+    scoreCell,
+    chickenCell,
+    playerStartColumn,
+    killColumns,
+    deathColumns,
+    chickenColumn,
+    bonusColumn,
+  };
+}
+
+function teamScoreFormula(inputSheet, team) {
+  const killScore = team.killColumns
+    .map(
+      (column, index) =>
+        `SUM('${inputSheet}'!${column}16:${column}35)*'${inputSheet}'!$H$3*${index + 1}`,
+    )
+    .join("+");
+  const deathRanges = team.deathColumns
+    .map((column) => `'${inputSheet}'!${column}16:${column}35`)
+    .join(",");
+  return (
+    `='${inputSheet}'!$${team.teamNameCell.slice(0, 1)}$${team.teamNameCell.slice(1)}` +
+    `&" "&((${killScore})+SUM(${deathRanges})*'${inputSheet}'!$K$3+` +
+    `SUM('${inputSheet}'!${team.chickenColumn}16:${team.chickenColumn}35)*'${inputSheet}'!$N$3+` +
+    `SUM('${inputSheet}'!${team.bonusColumn}16:${team.bonusColumn}35))&"점"`
+  );
+}
+
+function playerScoreFormula(inputSheet, team, index) {
+  const nameColumn = team.teamNameCell.slice(0, 1);
+  const nameRow = 7 + index;
+  const killColumn = team.killColumns[index];
+  const deathColumn = team.deathColumns[index];
+  const tier = index + 1;
+  return (
+    `=IF('${inputSheet}'!$${nameColumn}$${nameRow}="","",` +
+    `'${inputSheet}'!$${nameColumn}$${nameRow}&" "&(` +
+    `SUM('${inputSheet}'!${killColumn}16:${killColumn}35)*'${inputSheet}'!$H$3*${tier}+` +
+    `SUM('${inputSheet}'!${deathColumn}16:${deathColumn}35)*'${inputSheet}'!$K$3)` +
+    `&" ("&SUM('${inputSheet}'!${killColumn}16:${killColumn}35)&"-"&` +
+    `SUM('${inputSheet}'!${deathColumn}16:${deathColumn}35)&")")`
+  );
+}
+
+function chickenFormula(inputSheet, chickenColumn) {
+  return `="치킨 ["&SUM('${inputSheet}'!${chickenColumn}16:${chickenColumn}35)&"]"`;
 }
 
 function valueRange(sheet, range, values) {

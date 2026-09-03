@@ -84,7 +84,7 @@ test("출발 전 경기 기준선을 저장하고 새 완주 경기만 한 번 �
       ["B", 1],
     ],
   );
-  assert.equal(firstSync.summary.teams[0].score, -1);
+  assert.equal(firstSync.summary.teams[0].score, 0);
   assert.equal(firstSync.summary.teams[1].score, 1);
   repository.close();
 });

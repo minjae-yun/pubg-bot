@@ -1,6 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import {
+  calculateKillRacePlayerScore,
+  KILL_RACE_CHICKEN_POINTS,
+} from "./kill-race-config.js";
 
 const SCHEMA_VERSION = 4;
 const DATA_PARSER_VERSION = 1;
@@ -1320,7 +1324,12 @@ export class BotRepository {
       .all(sessionId)
       .map((member) => ({
         ...member,
-        score: Number(member.kills) - Number(member.deaths) * 2,
+        tier: Number(member.slot),
+        score: calculateKillRacePlayerScore({
+          kills: member.kills,
+          deaths: member.deaths,
+          tier: member.slot,
+        }),
       }));
     const matchTotals = this.database
       .prepare(`
@@ -1343,6 +1352,10 @@ export class BotRepository {
       const kills = players.reduce((sum, player) => sum + Number(player.kills), 0);
       const deaths = players.reduce((sum, player) => sum + Number(player.deaths), 0);
       const chickens = Number(matchTotal?.chickens ?? 0);
+      const playerScore = players.reduce(
+        (sum, player) => sum + Number(player.score),
+        0,
+      );
 
       return {
         teamKey,
@@ -1350,7 +1363,7 @@ export class BotRepository {
         kills,
         deaths,
         chickens,
-        score: kills - deaths * 2 + chickens * 8,
+        score: playerScore + chickens * KILL_RACE_CHICKEN_POINTS,
         players,
       };
     });

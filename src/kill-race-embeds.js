@@ -4,7 +4,11 @@ import {
   ButtonStyle,
   EmbedBuilder,
 } from "discord.js";
-import { formatKillRaceMode, getKillRaceMode } from "./kill-race-config.js";
+import {
+  formatKillRaceMode,
+  formatKillRaceScoring,
+  getKillRaceMode,
+} from "./kill-race-config.js";
 
 export function buildKillRaceLobbyEmbed(summary) {
   const { session, teams } = summary;
@@ -16,7 +20,8 @@ export function buildKillRaceLobbyEmbed(summary) {
     .setDescription(
       [
         `목표 **${session.targetScore}점**`,
-        "적 확정킬 **+1** · 최종 사망 **-2** · 치킨 **+8**",
+        formatKillRaceScoring(session.mode),
+        "참가 버튼을 누른 순서대로 1티어부터 배치됩니다.",
         "원하는 팀 버튼을 누르면 참가하거나 팀을 옮길 수 있습니다.",
       ].join("\n"),
     )
@@ -47,7 +52,7 @@ export function buildKillRaceActiveEmbed(summary, { addedMatches } = {}) {
   const { session, teams } = summary;
   const reached = teams.filter((team) => team.score >= session.targetScore);
   const description = [
-    `적 확정킬 **+1** · 최종 사망 **-2** · 치킨 **+8**`,
+    formatKillRaceScoring(session.mode),
     addedMatches > 0 ? `방금 **${addedMatches}개 팀 경기**를 새로 반영했습니다.` : null,
     reached.length > 0
       ? `목표 도달: ${reached.map((team) => `**TEAM ${team.teamKey}**`).join(" · ")}`

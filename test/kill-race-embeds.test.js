@@ -32,12 +32,12 @@ test("진행 카드와 시트에 표시할 선수 점수 형식을 맞춘다", (
     teams: [
       {
         teamKey: "A",
-        score: 8,
+        score: 12,
         rounds: 2,
         chickens: 1,
         players: [
-          { displayName: "민재", score: 2, kills: 4, deaths: 1 },
-          { displayName: "승환", score: -1, kills: 1, deaths: 1 },
+          { displayName: "민재", score: 3, kills: 4, deaths: 1 },
+          { displayName: "승환", score: 1, kills: 1, deaths: 1 },
         ],
       },
       { teamKey: "B", score: 0, rounds: 0, chickens: 0, players: [] },
@@ -46,7 +46,8 @@ test("진행 카드와 시트에 표시할 선수 점수 형식을 맞춘다", (
   const embed = buildKillRaceActiveEmbed(summary).toJSON();
   const buttons = buildKillRaceActiveButtons(session).toJSON().components;
 
-  assert.equal(embed.fields[0].name, "TEAM A 8점");
-  assert.match(embed.fields[0].value, /민재 2 \(4-1\)/);
+  assert.equal(embed.fields[0].name, "TEAM A 12점");
+  assert.match(embed.description, /1티어.*\+1.*2티어.*\+2.*3티어.*\+3/);
+  assert.match(embed.fields[0].value, /민재 3 \(4-1\)/);
   assert.equal(buttons[1].url, session.sheetUrl);
 });
