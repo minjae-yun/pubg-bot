@@ -69,6 +69,9 @@ export class GoogleSheetsClient {
       valueRange(sheet, "H3", [[1]]),
       valueRange(sheet, "K3", [[-2]]),
       valueRange(sheet, "N3", [[8]]),
+      valueRange(sheet, "A12", [[
+        "최종 사망 상태로 끝난 선수만 사망 칸에 1을 기록합니다. 블루칩으로 살아남으면 0으로 초기화되고, 치킨 경기에서는 전원 0입니다.",
+      ]]),
     ];
 
     if (session.mode === "2v2v2") {

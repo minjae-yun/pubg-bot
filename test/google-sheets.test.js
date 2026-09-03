@@ -23,6 +23,7 @@ test("3대3 참가자와 점수 규칙을 2팀 입력 시트에 초기화한다"
     requests[1].body.data.map((range) => [range.range, range.values]),
   );
   assert.deepEqual(updates.get("'2팀 입력'!E3"), [[30]]);
+  assert.match(updates.get("'2팀 입력'!A12")[0][0], /블루칩으로 살아남으면 0/);
   assert.deepEqual(updates.get("'2팀 입력'!B7:B10"), [
     ["민재"],
     ["승환"],

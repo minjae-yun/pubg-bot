@@ -1,7 +1,5 @@
 import { analyzeTrackedKills } from "./squad-kills.js";
 
-const KILL_EVENT_TYPES = new Set(["LogPlayerKill", "LogPlayerKillV2"]);
-
 function participantStatsByAccountId(match) {
   return new Map(
     (match?.included ?? [])
@@ -39,19 +37,13 @@ export function extractKillRaceTeamMatch({
   }
 
   const accountIds = members.map((member) => member.accountId);
-  const trackedAccounts = new Set(accountIds);
   const killAnalysis = analyzeTrackedKills(telemetry, accountIds);
-  const deaths = new Set();
-
-  for (const event of telemetry ?? []) {
-    if (KILL_EVENT_TYPES.has(event?._T) && trackedAccounts.has(event.victim?.accountId)) {
-      deaths.add(event.victim.accountId);
-    }
-  }
+  const chicken = members.some(
+    (member) => Number(statsByAccountId.get(member.accountId).winPlace) === 1,
+  );
 
   const players = members.map((member) => {
     const stats = statsByAccountId.get(member.accountId);
-    const telemetryShowsDeath = deaths.has(member.accountId);
     const finalStatsShowDeath = stats.deathType && stats.deathType !== "alive";
 
     return {
@@ -59,7 +51,7 @@ export function extractKillRaceTeamMatch({
       accountId: member.accountId,
       slot: member.slot,
       kills: killAnalysis.killsByPlayer.get(member.accountId)?.length ?? 0,
-      died: telemetryShowsDeath || Boolean(finalStatsShowDeath),
+      died: !chicken && Boolean(finalStatsShowDeath),
       placement: Number(stats.winPlace) || 0,
     };
   });
@@ -68,7 +60,7 @@ export function extractKillRaceTeamMatch({
     matchId: match.data?.id,
     mapName: match.data?.attributes?.mapName ?? "Unknown",
     createdAt: createdAt.toISOString(),
-    chicken: players.some((player) => player.placement === 1),
+    chicken,
     players,
   };
 }
