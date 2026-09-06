@@ -35,6 +35,21 @@ test("같은 피해자의 중복 킬 로그와 아군 처치는 제외한다", (
   assert.deepEqual(result.victimAccountIds, ["enemy-1"]);
 });
 
+test("AI 타입이나 ai 계정 ID를 가진 봇 처치는 제외한다", () => {
+  const botByType = killEvent("account-1", 10, "bot-account", 20);
+  botByType.victim.type = "user_ai";
+  const botByAccountId = killEvent("account-1", 10, "ai.2517", 30);
+  const human = killEvent("account-1", 10, "account-human", 40);
+
+  const analysis = analyzeTrackedKills(
+    [botByType, botByAccountId, human],
+    ["account-1"],
+  );
+
+  assert.equal(analysis.killsByPlayer.get("account-1").length, 1);
+  assert.equal(analysis.killsByPlayer.get("account-1")[0].victimAccountId, "account-human");
+});
+
 test("블루칩으로 재소환된 같은 적을 다시 잡아도 스쿼드 브레이커는 한 명으로 센다", () => {
   const events = [
     killEvent("account-1", 10, "enemy-1", 20),

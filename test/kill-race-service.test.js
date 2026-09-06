@@ -38,9 +38,12 @@ test("출발 전 경기 기준선을 저장하고 새 완주 경기만 한 번 �
   const sheetWrites = [];
   const pubgApi = {
     async getPlayersByAccountIds(accountIds) {
-      return accountIds.map((accountId) => ({
+      return accountIds.map((accountId, index) => ({
         accountId,
-        matchIds: phase === "baseline" ? ["old-match"] : ["new-match", "old-match"],
+        matchIds:
+          phase === "baseline" || index % 2 === 1
+            ? ["old-match"]
+            : ["new-match", "old-match"],
       }));
     },
     async getMatches(matchIds) {
@@ -50,12 +53,14 @@ test("출발 전 경기 기준선을 저장하고 새 완주 경기만 한 번 �
       assert.deepEqual(matchIds, ["new-match"]);
       return [rawMatch(repository.getKillRaceSession(session.id).startedAt)];
     },
-    async getTelemetry() {
-      return [
+    async getTelemetries(matches, concurrency) {
+      assert.equal(matches.length, 1);
+      assert.equal(concurrency, 4);
+      return [[
         killEvent("account-1", "enemy", 1, 9),
         killEvent("enemy", "account-2", 9, 1),
         killEvent("account-3", "enemy-2", 2, 8),
-      ];
+      ]];
     },
   };
   const sheets = {

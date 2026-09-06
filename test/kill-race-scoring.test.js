@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   extractKillRaceTeamMatch,
-  sharedNewMatchIds,
+  newMatchIdsFromAnyMember,
 } from "../src/kill-race-scoring.js";
 
 const members = [
@@ -18,13 +18,17 @@ const members = [
   },
 ];
 
-test("팀 전원이 공유하는 시작 후 경기만 후보로 고른다", () => {
+test("팀원 한 명에게만 먼저 보이는 새 경기도 후보로 고른다", () => {
   const players = [
     { accountId: "account-1", matchIds: ["old", "shared", "solo-1"] },
     { accountId: "account-2", matchIds: ["old", "shared", "solo-2"] },
   ];
 
-  assert.deepEqual(sharedNewMatchIds(players, members, ["old"]), ["shared"]);
+  assert.deepEqual(newMatchIdsFromAnyMember(players, members, ["old"]), [
+    "shared",
+    "solo-1",
+    "solo-2",
+  ]);
 });
 
 test("적 처치만 세고 블루칩으로 살아남은 선수의 사망 감점을 초기화한다", () => {
@@ -74,6 +78,45 @@ test("치킨을 먹으면 중간에 사망했어도 전원 사망 감점을 없�
 
   assert.equal(result.chicken, true);
   assert.deepEqual(result.players.map((player) => player.died), [false, false]);
+});
+
+test("AI 봇을 처치한 킬은 킬내기 점수에서 제외한다", () => {
+  const match = rawMatch([
+    participant("account-1", 3, "alive"),
+    participant("account-2", 3, "alive"),
+  ]);
+  const botByType = killEvent(
+    "account-1",
+    "bot-with-account",
+    1,
+    20,
+    "2026-09-03T03:01:00.000Z",
+  );
+  botByType.victim.type = "user_ai";
+  const botByAccountId = killEvent(
+    "account-1",
+    "ai.2517",
+    1,
+    30,
+    "2026-09-03T03:02:00.000Z",
+  );
+  const human = killEvent(
+    "account-1",
+    "account-enemy",
+    1,
+    40,
+    "2026-09-03T03:03:00.000Z",
+  );
+
+  const result = extractKillRaceTeamMatch({
+    match,
+    telemetry: [botByType, botByAccountId, human],
+    members,
+    startedAt: "2026-09-03T03:00:00.000Z",
+    endedAt: new Date("2026-09-03T04:00:00.000Z"),
+  });
+
+  assert.equal(result.players[0].kills, 1);
 });
 
 test("팀원 일부가 없는 경기와 스쿼드가 아닌 경기는 제외한다", () => {

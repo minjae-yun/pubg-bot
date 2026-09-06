@@ -102,6 +102,7 @@ export function analyzeTrackedKills(events, accountIds) {
     if (
       !trackedAccounts.has(killerAccountId) ||
       !victimAccountId ||
+      isAiPlayer(victim) ||
       killerAccountId === victimAccountId ||
       killerTeamId === undefined ||
       victimTeamId === undefined ||
@@ -167,6 +168,13 @@ export function analyzeTrackedKills(events, accountIds) {
   );
 
   return { killsByPlayer, sameSquadKills, playerTelemetry };
+}
+
+function isAiPlayer(character) {
+  return (
+    character?.type === "user_ai" ||
+    String(character?.accountId ?? "").startsWith("ai.")
+  );
 }
 
 function resolveKillerDamageInfo(event, killerAccountId) {

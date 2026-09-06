@@ -130,7 +130,7 @@ PUBG 플레이를 마친 뒤 파티장이 `결산하기` 버튼을 누르거나 
 KILL_RACE_SHEET_ID=구글_시트_URL의_d와_edit_사이_ID
 KILL_RACE_SHEET_URL=구글_시트_전체_URL
 GOOGLE_SERVICE_ACCOUNT_KEY_PATH=secrets/google-service-account.json
-KILL_RACE_AUTO_REFRESH_SECONDS=60
+KILL_RACE_AUTO_REFRESH_SECONDS=20
 ```
 
 예를 들어 주소가 `https://docs.google.com/spreadsheets/d/ABC123/edit`이면 Sheet ID는 `ABC123`입니다. `KILL_RACE_SHEET_URL`은 비워도 되지만 입력하면 디스코드의 **점수판 열기** 버튼이 해당 주소를 사용합니다.
@@ -174,9 +174,10 @@ KILL_RACE_AUTO_REFRESH_SECONDS=60
 - 치킨 경기: 중간 사망 여부와 관계없이 팀원 전원 사망 감점 없음
 - 치킨: 팀 점수 `+8점`
 - 팀킬: 킬 점수에 포함하지 않음
+- AI 봇 처치: 킬 점수에 포함하지 않음
 - 기절: 점수에 포함하지 않음
 
-봇은 기본 60초마다 PUBG API에 새로 끝난 경기가 있는지 확인합니다. 경기가 API에 게시되면 팀별 다음 라운드 행에 킬, 사망, 치킨을 기록하고 시트 수식이 점수를 갱신합니다. 같은 매치 ID는 SQLite에 기록되므로 여러 번 확인해도 중복 합산되지 않습니다.
+봇은 기본 20초마다 PUBG API에 새로 끝난 경기가 있는지 확인합니다. 한 팀원의 경기 목록에만 새 경기가 먼저 나타나도 경기 상세에서 팀원 전원의 참가 여부를 검증합니다. 경기가 API에 게시되면 팀별 다음 라운드 행에 킬, 사망, 치킨을 기록하고 시트 수식이 점수를 갱신합니다. 같은 매치 ID는 SQLite에 기록되므로 여러 번 확인해도 중복 합산되지 않습니다.
 
 디스코드 카드의 **지금 갱신**을 누르면 즉시 한 번 더 확인하고, **점수판 열기**를 누르면 Google 시트가 열립니다. 명령어로도 현재 저장된 점수를 볼 수 있습니다.
 

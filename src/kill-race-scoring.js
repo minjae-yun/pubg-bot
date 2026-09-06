@@ -17,25 +17,12 @@ export function extractKillRaceTeamMatch({
   startedAt,
   endedAt = new Date(),
 }) {
+  if (!isKillRaceTeamMatch({ match, members, startedAt, endedAt })) {
+    return null;
+  }
+
   const createdAt = new Date(match?.data?.attributes?.createdAt);
-  const start = new Date(startedAt);
-  const end = new Date(endedAt);
-  const gameMode = match?.data?.attributes?.gameMode ?? "";
-
-  if (
-    Number.isNaN(createdAt.getTime()) ||
-    createdAt < start ||
-    createdAt > end ||
-    !["squad", "squad-fpp"].includes(gameMode)
-  ) {
-    return null;
-  }
-
   const statsByAccountId = participantStatsByAccountId(match);
-  if (members.some((member) => !statsByAccountId.has(member.accountId))) {
-    return null;
-  }
-
   const accountIds = members.map((member) => member.accountId);
   const killAnalysis = analyzeTrackedKills(telemetry, accountIds);
   const chicken = members.some(
@@ -65,22 +52,47 @@ export function extractKillRaceTeamMatch({
   };
 }
 
-export function sharedNewMatchIds(players, members, excludedMatchIds = []) {
-  const playerByAccountId = new Map(
-    players.map((player) => [player.accountId, player]),
-  );
-  const memberMatchSets = members.map(
-    (member) => new Set(playerByAccountId.get(member.accountId)?.matchIds ?? []),
-  );
+export function isKillRaceTeamMatch({
+  match,
+  members,
+  startedAt,
+  endedAt = new Date(),
+}) {
+  const createdAt = new Date(match?.data?.attributes?.createdAt);
+  const start = new Date(startedAt);
+  const end = new Date(endedAt);
+  const gameMode = match?.data?.attributes?.gameMode ?? "";
+  const statsByAccountId = participantStatsByAccountId(match);
 
-  if (memberMatchSets.length === 0 || memberMatchSets.some((matches) => matches.size === 0)) {
-    return [];
+  return !(
+    Number.isNaN(createdAt.getTime()) ||
+    createdAt < start ||
+    createdAt > end ||
+    !["squad", "squad-fpp"].includes(gameMode) ||
+    members.some((member) => !statsByAccountId.has(member.accountId))
+  );
+}
+
+export function newMatchIdsFromAnyMember(players, members, excludedMatchIds = []) {
+  const memberAccountIds = new Set(members.map((member) => member.accountId));
+  const excluded = new Set(excludedMatchIds);
+  const candidates = [];
+  const seen = new Set();
+
+  for (const player of players) {
+    if (!memberAccountIds.has(player.accountId)) {
+      continue;
+    }
+
+    for (const matchId of player.matchIds ?? []) {
+      if (!matchId || excluded.has(matchId) || seen.has(matchId)) {
+        continue;
+      }
+
+      seen.add(matchId);
+      candidates.push(matchId);
+    }
   }
 
-  const excluded = new Set(excludedMatchIds);
-  return [...memberMatchSets[0]].filter(
-    (matchId) =>
-      !excluded.has(matchId) &&
-      memberMatchSets.every((matches) => matches.has(matchId)),
-  );
+  return candidates;
 }

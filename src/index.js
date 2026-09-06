@@ -22,7 +22,7 @@ const googleServiceAccountKeyPath = optionalEnv(
   "GOOGLE_SERVICE_ACCOUNT_KEY_PATH",
 );
 const killRaceRefreshIntervalMs =
-  positiveNumberEnv("KILL_RACE_AUTO_REFRESH_SECONDS", 60) * 1_000;
+  positiveNumberEnv("KILL_RACE_AUTO_REFRESH_SECONDS", 20) * 1_000;
 
 const pubgApi = new PubgApiClient({
   apiKey: requireEnv("PUBG_API_KEY"),

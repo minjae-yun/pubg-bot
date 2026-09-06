@@ -1,7 +1,8 @@
 import { getKillRaceMode } from "./kill-race-config.js";
 import {
   extractKillRaceTeamMatch,
-  sharedNewMatchIds,
+  isKillRaceTeamMatch,
+  newMatchIdsFromAnyMember,
 } from "./kill-race-scoring.js";
 
 export class KillRaceService {
@@ -10,7 +11,7 @@ export class KillRaceService {
     repository,
     sheets,
     sheetUrl,
-    refreshIntervalMs = 60_000,
+    refreshIntervalMs = 20_000,
   }) {
     this.pubgApi = pubgApi;
     this.repository = repository;
@@ -105,7 +106,7 @@ export class KillRaceService {
           sessionId,
           teamKey,
         );
-        const candidates = sharedNewMatchIds(players, teamMembers, [
+        const candidates = newMatchIdsFromAnyMember(players, teamMembers, [
           ...baseline,
           ...recorded,
         ]);
@@ -122,17 +123,31 @@ export class KillRaceService {
         .sort((left, right) =>
           left.data.attributes.createdAt.localeCompare(right.data.attributes.createdAt),
         );
+      const matchJobs = orderedMatches
+        .map((match) => ({
+          match,
+          interestedTeams: mode.teamKeys.filter((teamKey) =>
+            teamCandidates.get(teamKey).has(match.data?.id) &&
+            isKillRaceTeamMatch({
+              match,
+              members: members.filter((member) => member.teamKey === teamKey),
+              startedAt: session.startedAt,
+            }),
+          ),
+        }))
+        .filter(({ interestedTeams }) => interestedTeams.length > 0);
+      const telemetries =
+        matchJobs.length > 0
+          ? await this.pubgApi.getTelemetries(
+              matchJobs.map(({ match }) => match),
+              4,
+            )
+          : [];
       let addedMatches = 0;
 
-      for (const match of orderedMatches) {
-        const interestedTeams = mode.teamKeys.filter((teamKey) =>
-          teamCandidates.get(teamKey).has(match.data?.id),
-        );
-        if (interestedTeams.length === 0) {
-          continue;
-        }
-
-        const telemetry = await this.pubgApi.getTelemetry(match);
+      for (let index = 0; index < matchJobs.length; index += 1) {
+        const { match, interestedTeams } = matchJobs[index];
+        const telemetry = telemetries[index];
         for (const teamKey of interestedTeams) {
           const result = extractKillRaceTeamMatch({
             match,
@@ -182,6 +197,10 @@ export class KillRaceService {
 
   async syncAllActiveSessions() {
     for (const session of this.repository.getActiveKillRaceSessions()) {
+      if (this.locks.has(session.id)) {
+        continue;
+      }
+
       try {
         await this.syncSession(session.id);
       } catch (error) {
