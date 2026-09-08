@@ -66,14 +66,12 @@ export function buildKillRaceActiveEmbed(summary, { addedMatches } = {}) {
   for (const team of teams) {
     const playerLines = team.players.map(
       (player) =>
-        `${player.displayName} ${player.score} (${player.kills}-${player.deaths})`,
+        `${player.tier}티어 ${player.displayName} ${player.score}점 ` +
+        `(${player.kills}K-${player.deaths}D)`,
     );
     embed.addFields({
       name: `TEAM ${team.teamKey} ${team.score}점`,
-      value: [
-        ...playerLines,
-        `경기 ${team.rounds} · 치킨 ${team.chickens}`,
-      ].join("\n"),
+      value: playerLines.join("\n") || "선수 기록이 없습니다.",
       inline: true,
     });
   }
