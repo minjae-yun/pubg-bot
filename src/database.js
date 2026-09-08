@@ -5,6 +5,7 @@ import {
   calculateKillRacePlayerScore,
   KILL_RACE_CHICKEN_POINTS,
 } from "./kill-race-config.js";
+import { summarizeKillRaceHistory } from "./kill-race-history.js";
 
 const SCHEMA_VERSION = 4;
 const DATA_PARSER_VERSION = 1;
@@ -983,6 +984,27 @@ export class BotRepository {
         ORDER BY started_at ASC
       `)
       .all();
+  }
+
+  getKillRaceHistory(guildId) {
+    const summaries = this.database
+      .prepare(`
+        SELECT id
+        FROM kill_race_sessions AS sessions
+        WHERE guild_id = ?
+          AND status = 'completed'
+          AND started_at IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM kill_race_team_matches AS matches
+            WHERE matches.session_id = sessions.id
+          )
+        ORDER BY ended_at ASC, id ASC
+      `)
+      .all(guildId)
+      .map(({ id }) => this.getKillRaceSummary(id));
+
+    return summarizeKillRaceHistory(summaries);
   }
 
   getKillRaceMembers(sessionId) {
