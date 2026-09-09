@@ -128,3 +128,34 @@ test("전체 전적과 티어별 상대전적을 별도 화면으로 구성한�
   assert.equal(overallButtons[0].disabled, true);
   assert.equal(overallButtons[1].custom_id, "killrace:history:tiers");
 });
+
+test("한 티어에 선수가 많아도 두 명씩 한 줄에 배치한다", () => {
+  const player = (displayName) => ({
+    displayName,
+    wins: 1,
+    draws: 0,
+    losses: 0,
+    kills: 1,
+    deaths: 1,
+    score: 0,
+  });
+  const [embed] = buildKillRaceTierEmbeds({
+    tiers: [
+      {
+        tier: 1,
+        players: [player("민재"), player("승환"), player("유림")],
+      },
+    ],
+  }).map((value) => value.toJSON());
+
+  assert.deepEqual(
+    embed.fields.map((field) => [field.name, field.inline]),
+    [
+      ["민재", true],
+      ["승환", true],
+      ["\u200b", false],
+      ["유림", true],
+      ["\u200b", true],
+    ],
+  );
+});

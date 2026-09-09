@@ -114,18 +114,39 @@ export function buildKillRaceTierEmbeds(history) {
         .setColor(0x2b2d31)
         .setTitle(`${group.tier}티어 상대전적`);
 
-      for (const player of group.players) {
-        embed.addFields({
-          name: player.displayName,
-          value:
-            `${player.wins}승 ${player.draws}무 ${player.losses}패\n` +
-            `${player.kills}K-${player.deaths}D · ${player.score}점`,
-          inline: true,
-        });
+      for (let index = 0; index < group.players.length; index += 2) {
+        const row = group.players.slice(index, index + 2);
+        for (const player of row) {
+          embed.addFields(buildTierPlayerField(player));
+        }
+        if (row.length === 1) {
+          embed.addFields({
+            name: "\u200b",
+            value: "\u200b",
+            inline: true,
+          });
+        }
+        if (index + 2 < group.players.length) {
+          embed.addFields({
+            name: "\u200b",
+            value: "\u200b",
+            inline: false,
+          });
+        }
       }
 
       return embed;
     });
+}
+
+function buildTierPlayerField(player) {
+  return {
+    name: player.displayName,
+    value:
+      `${player.wins}승 ${player.draws}무 ${player.losses}패\n` +
+      `${player.kills}K-${player.deaths}D · ${player.score}점`,
+    inline: true,
+  };
 }
 
 export function buildKillRaceHistoryButtons(view = "overall") {
