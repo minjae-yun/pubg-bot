@@ -125,6 +125,10 @@ export const killRaceStatusCommand = new SlashCommandBuilder()
   .setName("킬내기현황")
   .setDescription("현재 채널의 킬내기 점수를 확인합니다.");
 
+export const killRaceHistoryCommand = new SlashCommandBuilder()
+  .setName("킬내기전적")
+  .setDescription("이 서버에서 완료된 킬내기의 전체 누적 전적을 확인합니다.");
+
 export const killRaceEndCommand = new SlashCommandBuilder()
   .setName("킬내기종료")
   .setDescription("현재 채널의 킬내기를 종료합니다.");
@@ -138,5 +142,6 @@ export const commands = [
   partyCancelCommand,
   killRaceStartCommand,
   killRaceStatusCommand,
+  killRaceHistoryCommand,
   killRaceEndCommand,
 ];

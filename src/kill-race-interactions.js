@@ -1,6 +1,7 @@
 import { MessageFlags, PermissionFlagsBits } from "discord.js";
 import {
   killRaceEndCommand,
+  killRaceHistoryCommand,
   killRaceStartCommand,
   killRaceStatusCommand,
 } from "./commands.js";
@@ -8,8 +9,11 @@ import { getKillRaceMode } from "./kill-race-config.js";
 import {
   buildKillRaceActiveButtons,
   buildKillRaceActiveEmbed,
+  buildKillRaceHistoryButtons,
+  buildKillRaceHistoryEmbed,
   buildKillRaceLobbyButtons,
   buildKillRaceLobbyEmbed,
+  buildKillRaceTierEmbeds,
 } from "./kill-race-embeds.js";
 
 export class KillRaceUserError extends Error {}
@@ -25,6 +29,9 @@ export async function handleKillRaceCommand(
     case killRaceStatusCommand.name:
       await handleStatusCommand(interaction, repository);
       return true;
+    case killRaceHistoryCommand.name:
+      await handleHistoryCommand(interaction, repository);
+      return true;
     case killRaceEndCommand.name:
       await handleEndCommand(interaction, repository);
       return true;
@@ -39,6 +46,12 @@ export async function handleKillRaceButton(
 ) {
   const parts = interaction.customId.split(":");
   const action = parts[1];
+
+  if (action === "history") {
+    await handleHistoryButton(interaction, parts[2], repository);
+    return;
+  }
+
   const teamKey = action === "join" ? parts[2] : undefined;
   const sessionId = Number(parts[action === "join" ? 3 : 2]);
   const session = repository.getKillRaceSession(sessionId);
@@ -110,6 +123,46 @@ export async function handleKillRaceButton(
       components: [],
     });
   }
+}
+
+async function handleHistoryCommand(interaction, repository) {
+  assertGuild(interaction);
+  const history = getHistoryOrThrow(repository, interaction.guildId);
+  await interaction.reply({
+    embeds: [buildKillRaceHistoryEmbed(history)],
+    components: [buildKillRaceHistoryButtons("overall")],
+  });
+}
+
+async function handleHistoryButton(interaction, view, repository) {
+  assertGuild(interaction);
+  const history = getHistoryOrThrow(repository, interaction.guildId);
+
+  if (view === "overall") {
+    await interaction.update({
+      embeds: [buildKillRaceHistoryEmbed(history)],
+      components: [buildKillRaceHistoryButtons("overall")],
+    });
+    return;
+  }
+
+  if (view === "tiers") {
+    await interaction.update({
+      embeds: buildKillRaceTierEmbeds(history),
+      components: [buildKillRaceHistoryButtons("tiers")],
+    });
+    return;
+  }
+
+  throw new KillRaceUserError("지원하지 않는 킬내기 전적 화면입니다.");
+}
+
+function getHistoryOrThrow(repository, guildId) {
+  const history = repository.getKillRaceHistory(guildId);
+  if (history.raceCount === 0) {
+    throw new KillRaceUserError("아직 완료된 킬내기 전적이 없습니다.");
+  }
+  return history;
 }
 
 async function handleStartCommand(interaction, repository, killRaceService) {

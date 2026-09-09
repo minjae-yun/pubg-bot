@@ -86,6 +86,63 @@ export function buildKillRaceActiveEmbed(summary, { addedMatches } = {}) {
   return embed;
 }
 
+export function buildKillRaceHistoryEmbed(history) {
+  const playerLines = history.players.map((player, index) =>
+    [
+      `**${index + 1}. ${player.displayName}**`,
+      `참가 ${player.races}회 · 팀 전적 ${player.wins}승 ${player.draws}무 ${player.losses}패`,
+      `${player.kills}K-${player.deaths}D · ${player.score}점 · 치킨 ${player.chickens}회`,
+    ].join("\n"),
+  );
+
+  return new EmbedBuilder()
+    .setColor(0x2b2d31)
+    .setTitle("킬내기 전체 전적")
+    .setDescription(
+      [
+        `완료된 킬내기 **${history.raceCount}회**`,
+        ...playerLines,
+      ].join("\n\n"),
+    );
+}
+
+export function buildKillRaceTierEmbeds(history) {
+  return history.tiers
+    .filter((group) => group.players.length > 0)
+    .map((group) => {
+      const embed = new EmbedBuilder()
+        .setColor(0x2b2d31)
+        .setTitle(`${group.tier}티어 상대전적`);
+
+      for (const player of group.players) {
+        embed.addFields({
+          name: player.displayName,
+          value:
+            `${player.wins}승 ${player.draws}무 ${player.losses}패\n` +
+            `${player.kills}K-${player.deaths}D · ${player.score}점`,
+          inline: true,
+        });
+      }
+
+      return embed;
+    });
+}
+
+export function buildKillRaceHistoryButtons(view = "overall") {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("killrace:history:overall")
+      .setLabel("전체 전적")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(view === "overall"),
+    new ButtonBuilder()
+      .setCustomId("killrace:history:tiers")
+      .setLabel("티어별 전적")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(view === "tiers"),
+  );
+}
+
 export function buildKillRaceLobbyButtons(session) {
   const mode = getKillRaceMode(session.mode);
   const buttons = mode.teamKeys.map((teamKey) =>
