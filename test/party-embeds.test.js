@@ -145,6 +145,15 @@ test("결산 화면에 ACE와 공동 SQUAD BREAKER를 표시한다", () => {
   assert.match(embed.fields.at(-1).value, /완료 · 개인 7킬/);
   assert.match(embed.fields.at(-1).value, /미완료 · 박격포 킬/);
 
+  const cleanEmbed = buildPartyReportEmbed(
+    {
+      ...report,
+      awards: { ...report.awards, trolls: [] },
+    },
+    { startedAt: "2026-08-23T00:00:00.000Z" },
+  ).toJSON();
+  assert.doesNotMatch(cleanEmbed.description, /오늘의 씹쓰레기/);
+
   const reviewEmbed = buildPartyReportEmbed(
     report,
     { startedAt: "2026-08-23T00:00:00.000Z" },

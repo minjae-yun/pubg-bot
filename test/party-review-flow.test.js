@@ -130,6 +130,67 @@ test("늦게 반영된 마지막 경기를 새로고침으로 추가한 뒤 결�
   repository.close();
 });
 
+test("파티 결산 킬 수에서 AI 봇 처치를 제외한다", async () => {
+  const repository = createRepository(":memory:");
+  registerPlayer(repository, "owner-1", "account-1", "PlayerOne");
+  registerPlayer(repository, "member-1", "account-2", "PlayerTwo");
+
+  const { session } = repository.createPartySession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: "owner-1",
+  });
+  repository.addPartyMember(session.id, "member-1");
+  repository.startPartySession(session.id, []);
+
+  const now = Date.now();
+  repository.database
+    .prepare("UPDATE party_sessions SET started_at = ? WHERE id = ?")
+    .run(new Date(now - 10 * 60_000).toISOString(), session.id);
+
+  const match = rawMatch({
+    id: "match-ai-kills",
+    createdAt: new Date(now - 5 * 60_000).toISOString(),
+    ownerKills: 2,
+    memberKills: 1,
+  });
+  const telemetry = [
+    telemetryKill("account-1", "human-enemy", "user"),
+    telemetryKill("account-1", "ai.100", "user_ai"),
+    telemetryKill("account-2", "ai.200", "user_ai"),
+  ];
+  const pubgApi = {
+    platform: "steam",
+    async getPlayersByAccountIds(accountIds) {
+      return accountIds.map((accountId) => ({
+        accountId,
+        matchIds: ["match-ai-kills"],
+      }));
+    },
+    async getMatches() {
+      return [match];
+    },
+    async getTelemetries() {
+      return [telemetry];
+    },
+  };
+  const handler = createInteractionHandler({ pubgApi, repository });
+
+  await handler(buttonInteraction(`party:summary:${session.id}`).interaction);
+
+  const report = repository.getPartyReviewSnapshot(session.id).report;
+  assert.equal(report.totalKills, 1);
+  assert.equal(
+    report.players.find((player) => player.discordUserId === "owner-1").kills,
+    1,
+  );
+  assert.equal(
+    report.players.find((player) => player.discordUserId === "member-1").kills,
+    0,
+  );
+  repository.close();
+});
+
 function registerPlayer(repository, discordUserId, accountId, playerName) {
   repository.upsertPlayer({
     guildId: "guild-1",
@@ -185,6 +246,18 @@ function participant({ accountId, playerName, kills, damage }) {
         winPlace: 2,
         timeSurvived: 1_200,
       },
+    },
+  };
+}
+
+function telemetryKill(killerAccountId, victimAccountId, victimType) {
+  return {
+    _T: "LogPlayerKillV2",
+    killer: { accountId: killerAccountId, teamId: 10 },
+    victim: { accountId: victimAccountId, teamId: 20, type: victimType },
+    killerDamageInfo: {
+      damageCauserName: "WeapM416_C",
+      damageTypeCategory: "Damage_Gun",
     },
   };
 }

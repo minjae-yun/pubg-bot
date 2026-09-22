@@ -86,9 +86,8 @@ test("파티 시작 이후 매치에서 멤버 기록과 어워드를 계산한�
   assert.deepEqual(report.awards.squadBreaker, []);
   assert.deepEqual(
     report.awards.trolls.map((player) => player.discordUserId),
-    ["user-2"],
+    [],
   );
-  assert.match(report.awards.trolls[0].trollReasons[0], /팀 내 최저/);
 });
 
 test("팀킬한 사람이 여러 명이면 모두 공동 인간쓰레기로 선정한다", () => {
@@ -133,6 +132,22 @@ test("팀 평균 기여도의 절반 이하인 플레이어를 인간쓰레기�
   assert.equal(report.awards.trolls.length, 1);
   assert.equal(report.awards.trolls[0].discordUserId, "user-2");
   assert.match(report.awards.trolls[0].trollReasons[0], /인분/);
+});
+
+test("기여도가 정확히 0.5인분이면 인간쓰레기로 선정한다", () => {
+  const match = {
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { damage: 300 }),
+      partyPlayer("user-2", { damage: 100 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.equal(report.players[1].contributionRatio, 0.5);
+  assert.equal(report.awards.trolls.length, 1);
+  assert.equal(report.awards.trolls[0].discordUserId, "user-2");
 });
 
 test("팀킬한 플레이어는 성적이 가장 좋아도 ACE에서 제외한다", () => {

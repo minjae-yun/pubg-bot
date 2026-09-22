@@ -261,27 +261,5 @@ function pickTrolls(players) {
     }
   }
 
-  if (selected.size === 0 && players.length > 0) {
-    const lowest = players.reduce((loser, player) => {
-      if (
-        !loser ||
-        comparePlayers(player, loser, [
-          "contributionScore",
-          "averageDamage",
-          "kills",
-        ]) < 0
-      ) {
-        return player;
-      }
-
-      return loser;
-    }, null);
-
-    selected.set(lowest.discordUserId, {
-      ...lowest,
-      trollReasons: [`팀 내 최저 ${lowest.contributionRatio.toFixed(2)}인분`],
-    });
-  }
-
   return [...selected.values()];
 }

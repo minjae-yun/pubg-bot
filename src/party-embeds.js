@@ -181,7 +181,7 @@ export function buildPartyReportEmbed(
       ? `**SQUAD BREAKER** ${squadBreakerWinners} ` +
         `(한 경기에서 동일 적 스쿼드 ${squadBreakerCount}명 처치)`
       : null,
-    `**오늘의 씹쓰레기** ${trollWinners}`,
+    trollWinners ? `**오늘의 씹쓰레기** ${trollWinners}` : null,
     missionLeaderNames
       ? `**미션 포인트 1위** ${missionLeaderNames} (${missionLeaderPoints}P)`
       : null,

@@ -646,17 +646,21 @@ async function collectPartyReview(session, pubgApi, repository, dataCollector) {
   const partyMatches = selectedMatches.map(({ partyMatch }, index) => {
     const friendlyKnocks = countFriendlyKnocks(telemetries[index], accountIds);
     const killAnalysis = analyzeTrackedKills(telemetries[index], accountIds);
+    const hasTelemetry = (telemetries[index]?.length ?? 0) > 0;
 
     return {
       ...partyMatch,
       players: partyMatch.players.map((player) => {
         const telemetry = killAnalysis.playerTelemetry.get(player.accountId);
+        const humanKillEvents =
+          killAnalysis.killsByPlayer.get(player.accountId) ?? [];
         return {
           ...player,
+          kills: hasTelemetry ? humanKillEvents.length : player.kills,
           friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
           squadBreakerCount:
             killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,
-          killEvents: killAnalysis.killsByPlayer.get(player.accountId) ?? [],
+          killEvents: humanKillEvents,
           firstFirearmKey: telemetry?.firstFirearmKey,
           carePackageWeaponKeys: [
             ...(telemetry?.carePackageWeaponKeys ?? []),
