@@ -657,6 +657,9 @@ async function collectPartyReview(session, pubgApi, repository, dataCollector) {
         return {
           ...player,
           kills: hasTelemetry ? humanKillEvents.length : player.kills,
+          damage: hasTelemetry
+            ? (killAnalysis.humanDamageByPlayer.get(player.accountId) ?? 0)
+            : player.damage,
           friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
           squadBreakerCount:
             killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,

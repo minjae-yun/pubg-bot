@@ -130,7 +130,7 @@ test("늦게 반영된 마지막 경기를 새로고침으로 추가한 뒤 결�
   repository.close();
 });
 
-test("파티 결산 킬 수에서 AI 봇 처치를 제외한다", async () => {
+test("파티 결산 킬 수와 딜량에서 AI 봇 상대 기록을 제외한다", async () => {
   const repository = createRepository(":memory:");
   registerPlayer(repository, "owner-1", "account-1", "PlayerOne");
   registerPlayer(repository, "member-1", "account-2", "PlayerTwo");
@@ -158,6 +158,9 @@ test("파티 결산 킬 수에서 AI 봇 처치를 제외한다", async () => {
     telemetryKill("account-1", "human-enemy", "user"),
     telemetryKill("account-1", "ai.100", "user_ai"),
     telemetryKill("account-2", "ai.200", "user_ai"),
+    telemetryDamage("account-1", "human-enemy", "user", 60),
+    telemetryDamage("account-1", "ai.100", "user_ai", 40),
+    telemetryDamage("account-2", "ai.200", "user_ai", 100),
   ];
   const pubgApi = {
     platform: "steam",
@@ -186,6 +189,15 @@ test("파티 결산 킬 수에서 AI 봇 처치를 제외한다", async () => {
   );
   assert.equal(
     report.players.find((player) => player.discordUserId === "member-1").kills,
+    0,
+  );
+  assert.equal(report.averageTeamDamage, 60);
+  assert.equal(
+    report.players.find((player) => player.discordUserId === "owner-1").damage,
+    60,
+  );
+  assert.equal(
+    report.players.find((player) => player.discordUserId === "member-1").damage,
     0,
   );
   repository.close();
@@ -259,6 +271,15 @@ function telemetryKill(killerAccountId, victimAccountId, victimType) {
       damageCauserName: "WeapM416_C",
       damageTypeCategory: "Damage_Gun",
     },
+  };
+}
+
+function telemetryDamage(attackerAccountId, victimAccountId, victimType, damage) {
+  return {
+    _T: "LogPlayerTakeDamage",
+    attacker: { accountId: attackerAccountId, teamId: 10 },
+    victim: { accountId: victimAccountId, teamId: 20, type: victimType },
+    damage,
   };
 }
 

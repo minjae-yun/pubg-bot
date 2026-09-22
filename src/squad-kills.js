@@ -27,6 +27,7 @@ export function analyzeTrackedKills(events, accountIds) {
   const trackedAccounts = new Set(accountIds.filter(Boolean));
   const orderedEvents = orderTelemetryEvents(events);
   const killsByPlayer = createTrackedMap(trackedAccounts, () => []);
+  const humanDamageByPlayer = createTrackedMap(trackedAccounts, () => 0);
   const playerTelemetry = createTrackedMap(trackedAccounts, () => ({
     firstFirearmKey: undefined,
     carePackageWeaponKeys: new Set(),
@@ -41,6 +42,31 @@ export function analyzeTrackedKills(events, accountIds) {
   const attacksById = new Map();
 
   for (const event of orderedEvents) {
+    if (event?._T === "LogPlayerTakeDamage") {
+      const attacker = event.attacker;
+      const victim = event.victim;
+      const attackerAccountId = attacker?.accountId;
+      const victimAccountId = victim?.accountId;
+      const damage = Number(event.damage);
+
+      if (
+        trackedAccounts.has(attackerAccountId) &&
+        victimAccountId &&
+        !isAiPlayer(victim) &&
+        attackerAccountId !== victimAccountId &&
+        attacker?.teamId !== undefined &&
+        victim?.teamId !== undefined &&
+        String(attacker.teamId) !== String(victim.teamId) &&
+        Number.isFinite(damage) &&
+        damage > 0
+      ) {
+        humanDamageByPlayer.set(
+          attackerAccountId,
+          humanDamageByPlayer.get(attackerAccountId) + damage,
+        );
+      }
+    }
+
     if (event?._T === "LogParachuteLanding") {
       const accountId = event.character?.accountId;
       if (trackedAccounts.has(accountId)) {
@@ -167,7 +193,12 @@ export function analyzeTrackedKills(events, accountIds) {
     }),
   );
 
-  return { killsByPlayer, sameSquadKills, playerTelemetry };
+  return {
+    killsByPlayer,
+    humanDamageByPlayer,
+    sameSquadKills,
+    playerTelemetry,
+  };
 }
 
 function isAiPlayer(character) {

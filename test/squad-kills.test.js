@@ -50,6 +50,21 @@ test("AI 타입이나 ai 계정 ID를 가진 봇 처치는 제외한다", () => 
   assert.equal(analysis.killsByPlayer.get("account-1")[0].victimAccountId, "account-human");
 });
 
+test("사람 적에게 준 데미지만 집계하고 AI·아군·자해 데미지는 제외한다", () => {
+  const analysis = analyzeTrackedKills(
+    [
+      damageEvent("account-1", 10, "human-enemy", 20, "user", 42.5),
+      damageEvent("account-1", 10, "ai.100", 30, "user_ai", 35),
+      damageEvent("account-1", 10, "teammate", 10, "user", 20),
+      damageEvent("account-1", 10, "account-1", 10, "user", 10),
+      damageEvent("other-player", 40, "human-enemy", 20, "user", 99),
+    ],
+    ["account-1"],
+  );
+
+  assert.equal(analysis.humanDamageByPlayer.get("account-1"), 42.5);
+});
+
 test("블루칩으로 재소환된 같은 적을 다시 잡아도 스쿼드 브레이커는 한 명으로 센다", () => {
   const events = [
     killEvent("account-1", 10, "enemy-1", 20),
@@ -264,5 +279,25 @@ function killEvent(killerId, killerTeamId, victimId, victimTeamId) {
     _T: "LogPlayerKillV2",
     killer: { accountId: killerId, teamId: killerTeamId },
     victim: { accountId: victimId, teamId: victimTeamId },
+  };
+}
+
+function damageEvent(
+  attackerId,
+  attackerTeamId,
+  victimId,
+  victimTeamId,
+  victimType,
+  damage,
+) {
+  return {
+    _T: "LogPlayerTakeDamage",
+    attacker: { accountId: attackerId, teamId: attackerTeamId },
+    victim: {
+      accountId: victimId,
+      teamId: victimTeamId,
+      type: victimType,
+    },
+    damage,
   };
 }
