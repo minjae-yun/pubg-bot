@@ -112,6 +112,16 @@ export const killRaceStartCommand = new SlashCommandBuilder()
         { name: "2대2대2", value: "2v2v2" },
       ),
   )
+  .addStringOption((option) =>
+    option
+      .setName("진행방식")
+      .setDescription("목표점수 또는 시간제한(기본값: 목표점수)")
+      .setRequired(false)
+      .addChoices(
+        { name: "목표점수", value: "score" },
+        { name: "시간제한", value: "timed" },
+      ),
+  )
   .addIntegerOption((option) =>
     option
       .setName("목표점수")
@@ -119,6 +129,14 @@ export const killRaceStartCommand = new SlashCommandBuilder()
       .setRequired(false)
       .setMinValue(1)
       .setMaxValue(200),
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName("제한시간")
+      .setDescription("시간제한 모드의 진행 시간(시간, 기본값: 3시간)")
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(24),
   );
 
 export const killRaceStatusCommand = new SlashCommandBuilder()

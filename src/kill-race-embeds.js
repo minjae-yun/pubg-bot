@@ -5,6 +5,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import {
+  formatKillRaceDuration,
   formatKillRaceMode,
   formatKillRaceScoring,
   getKillRaceMode,
@@ -19,7 +20,9 @@ export function buildKillRaceLobbyEmbed(summary) {
     .setTitle(`킬내기 팀 모집 · ${formatKillRaceMode(session.mode)}`)
     .setDescription(
       [
-        `목표 **${session.targetScore}점**`,
+        session.ruleType === "timed"
+          ? `시간제한 **${formatKillRaceDuration(session.durationMinutes)}** · 출발 후 자동 종료`
+          : `목표 **${session.targetScore}점**`,
         formatKillRaceScoring(session.mode),
         "참가 버튼을 누른 순서대로 1티어부터 배치됩니다.",
         "원하는 팀 버튼을 누르면 참가하거나 팀을 옮길 수 있습니다.",
@@ -50,17 +53,32 @@ export function buildKillRaceLobbyEmbed(summary) {
 
 export function buildKillRaceActiveEmbed(summary, { addedMatches } = {}) {
   const { session, teams } = summary;
-  const reached = teams.filter((team) => team.score >= session.targetScore);
+  const timed = session.ruleType === "timed";
+  const reached = timed
+    ? []
+    : teams.filter((team) => team.score >= session.targetScore);
+  const completed = session.status === "completed";
+  const expiresTimestamp = session.expiresAt
+    ? Math.floor(new Date(session.expiresAt).getTime() / 1_000)
+    : undefined;
   const description = [
     formatKillRaceScoring(session.mode),
+    timed && !completed && expiresTimestamp
+      ? `자동 종료: <t:${expiresTimestamp}:F> (<t:${expiresTimestamp}:R>)`
+      : null,
     addedMatches > 0 ? `방금 **${addedMatches}개 팀 경기**를 새로 반영했습니다.` : null,
+    timed && completed ? formatWinner(teams) : null,
     reached.length > 0
       ? `목표 도달: ${reached.map((team) => `**TEAM ${team.teamKey}**`).join(" · ")}`
       : null,
   ].filter(Boolean);
   const embed = new EmbedBuilder()
-    .setColor(reached.length > 0 ? 0x57f287 : 0x2b2d31)
-    .setTitle(`킬내기 ${session.targetScore}점 · ${formatKillRaceMode(session.mode)}`)
+    .setColor(completed || reached.length > 0 ? 0x57f287 : 0x2b2d31)
+    .setTitle(
+      timed
+        ? `킬내기 ${formatKillRaceDuration(session.durationMinutes)} · ${formatKillRaceMode(session.mode)}`
+        : `킬내기 ${session.targetScore}점 · ${formatKillRaceMode(session.mode)}`,
+    )
     .setDescription(description.join("\n"));
 
   for (const team of teams) {
@@ -84,6 +102,20 @@ export function buildKillRaceActiveEmbed(summary, { addedMatches } = {}) {
   }
 
   return embed;
+}
+
+function formatWinner(teams) {
+  const highestScore = Math.max(...teams.map((team) => Number(team.score)));
+  const leaders = teams.filter((team) => Number(team.score) === highestScore);
+
+  if (leaders.length === 1) {
+    return `시간 종료 · **TEAM ${leaders[0].teamKey} 승리** (${highestScore}점)`;
+  }
+
+  return (
+    `시간 종료 · **${leaders.map((team) => `TEAM ${team.teamKey}`).join(" · ")} 공동 1위** ` +
+    `(${highestScore}점)`
+  );
 }
 
 export function buildKillRaceHistoryEmbed(history) {

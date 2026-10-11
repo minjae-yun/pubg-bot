@@ -29,8 +29,8 @@ test("일반 파티가 있어도 별도 3대3 킬내기를 만들고 팀을 선�
     ...baseInteraction("owner-1", "DiscordOwner"),
     commandName: "킬내기시작",
     options: {
-      getString: () => "3v3",
-      getInteger: () => 30,
+      getString: (name) => (name === "모드" ? "3v3" : null),
+      getInteger: (name) => (name === "목표점수" ? 30 : null),
     },
     isChatInputCommand: () => true,
     isButton: () => false,
@@ -42,6 +42,7 @@ test("일반 파티가 있어도 별도 3대3 킬내기를 만들고 팀을 선�
   const session = repository.getOpenKillRaceSession("guild-1", "channel-1");
   assert.equal(session.mode, "3v3");
   assert.equal(session.targetScore, 30);
+  assert.equal(session.ruleType, "score");
   assert.equal(repository.getKillRaceMembers(session.id)[0].displayName, "민재");
   assert.equal(repository.getOpenPartySession("guild-1", "channel-1").status, "recruiting");
   assert.match(replies[0].embeds[0].data.title, /3대3/);
@@ -62,6 +63,41 @@ test("일반 파티가 있어도 별도 3대3 킬내기를 만들고 팀을 선�
   assert.equal(member.teamKey, "B");
   assert.equal(member.displayName, "승환");
   assert.equal(updates.length, 1);
+  repository.close();
+});
+
+test("시간제한 킬내기를 3시간 모드로 만든다", async () => {
+  const repository = createRepository(":memory:");
+  register(repository, "owner-1", "account-1", "PUBGOwner", "민재");
+  const handler = createInteractionHandler({
+    pubgApi: {},
+    repository,
+    killRaceService: {
+      isConfigured: () => true,
+      getSheetReference: () => ({
+        sheetId: "sheet-id",
+        sheetUrl: "https://docs.google.com/spreadsheets/d/sheet-id/edit",
+      }),
+    },
+  });
+  const replies = [];
+
+  await handler({
+    ...baseInteraction("owner-1", "민재"),
+    commandName: "킬내기시작",
+    options: {
+      getString: (name) => (name === "모드" ? "3v3" : "timed"),
+      getInteger: (name) => (name === "제한시간" ? 3 : null),
+    },
+    isChatInputCommand: () => true,
+    isButton: () => false,
+    reply: async (payload) => replies.push(payload),
+  });
+
+  const session = repository.getOpenKillRaceSession("guild-1", "channel-1");
+  assert.equal(session.ruleType, "timed");
+  assert.equal(session.durationMinutes, 180);
+  assert.match(replies[0].embeds[0].data.description, /시간제한 \*\*3시간\*\*/);
   repository.close();
 });
 

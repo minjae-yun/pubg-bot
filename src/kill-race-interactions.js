@@ -98,7 +98,10 @@ export async function handleKillRaceButton(
       const result = await killRaceService.syncSession(session.id);
       await interaction.editReply({
         embeds: [buildKillRaceActiveEmbed(result.summary, result)],
-        components: [buildKillRaceActiveButtons(result.summary.session)],
+        components:
+          result.summary.session.status === "active"
+            ? [buildKillRaceActiveButtons(result.summary.session)]
+            : [],
       });
     } catch (error) {
       throw new KillRaceUserError(error.message);
@@ -108,10 +111,10 @@ export async function handleKillRaceButton(
 
   if (action === "cancel" || action === "finish") {
     assertOwner(interaction, session, action === "cancel" ? "취소" : "종료");
-    const summary = repository.getKillRaceSummary(session.id);
     if (!repository.completeKillRaceSession(session.id)) {
       throw new KillRaceUserError("이미 종료된 킬내기입니다.");
     }
+    const summary = repository.getKillRaceSummary(session.id);
 
     await interaction.update({
       content:
@@ -184,14 +187,18 @@ async function handleStartCommand(interaction, repository, killRaceService) {
   }
 
   const mode = interaction.options.getString("모드", true);
+  const ruleType = interaction.options.getString("진행방식") ?? "score";
   const targetScore = interaction.options.getInteger("목표점수") ?? 30;
+  const durationHours = interaction.options.getInteger("제한시간") ?? 3;
   const sheet = killRaceService.getSheetReference();
   const { session, created } = repository.createKillRaceSession({
     guildId: interaction.guildId,
     channelId: interaction.channelId,
     ownerUserId: interaction.user.id,
     mode,
+    ruleType,
     targetScore,
+    durationMinutes: ruleType === "timed" ? durationHours * 60 : undefined,
     ...sheet,
     ownerMember: memberSnapshot(interaction, registeredPlayer),
   });
@@ -247,8 +254,8 @@ async function handleEndCommand(interaction, repository) {
   }
 
   assertOwner(interaction, session, "종료");
-  const summary = repository.getKillRaceSummary(session.id);
   repository.completeKillRaceSession(session.id);
+  const summary = repository.getKillRaceSummary(session.id);
   await interaction.reply({
     content: "킬내기를 종료했습니다. 마지막 API 반영 여부는 점수판에서 확인해 주세요.",
     embeds: session.status === "active" ? [buildKillRaceActiveEmbed(summary)] : [],

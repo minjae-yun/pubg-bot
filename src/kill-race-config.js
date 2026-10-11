@@ -35,6 +35,17 @@ export function formatKillRaceMode(mode) {
   return mode.replaceAll("v", "대");
 }
 
+export function formatKillRaceDuration(durationMinutes) {
+  const minutes = Number(durationMinutes);
+  if (minutes % 60 === 0) {
+    return `${minutes / 60}시간`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours > 0 ? `${hours}시간 ${remainder}분` : `${remainder}분`;
+}
+
 export function getTierKillPoints(tier) {
   return KILL_RACE_TIER_KILL_POINTS[Number(tier) - 1] ?? 0;
 }

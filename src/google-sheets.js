@@ -2,6 +2,7 @@ import { createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  formatKillRaceDuration,
   formatMapName,
   getKillRaceMode,
   KILL_RACE_CHICKEN_POINTS,
@@ -71,7 +72,11 @@ export class GoogleSheetsClient {
     );
     const data = [
       valueRange(sheet, "B3", [["킬내기"]]),
-      valueRange(sheet, "E3", [[session.targetScore]]),
+      valueRange(sheet, "E3", [[
+        session.ruleType === "timed"
+          ? formatKillRaceDuration(session.durationMinutes)
+          : `${session.targetScore}점`,
+      ]]),
       ...scoringRuleRanges(session.mode),
     ];
 
@@ -218,7 +223,7 @@ function scoringRuleRanges(mode) {
     valueRange(
       scoreSheet,
       "A1",
-      [[`='${inputSheet}'!$B$3&" "&'${inputSheet}'!$E$3&"점"`]],
+      [[`='${inputSheet}'!$B$3&" "&'${inputSheet}'!$E$3`]],
     ),
   ];
 

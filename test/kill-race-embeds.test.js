@@ -6,6 +6,7 @@ import {
   buildKillRaceHistoryButtons,
   buildKillRaceHistoryEmbed,
   buildKillRaceLobbyButtons,
+  buildKillRaceLobbyEmbed,
   buildKillRaceTierEmbeds,
 } from "../src/kill-race-embeds.js";
 
@@ -54,6 +55,36 @@ test("진행 카드와 시트에 표시할 선수 점수 형식을 맞춘다", (
   assert.match(embed.fields[0].value, /1티어 민재 3점 \(4K-1D\)/);
   assert.doesNotMatch(embed.fields[0].value, /경기|치킨/);
   assert.equal(buttons[1].url, session.sheetUrl);
+});
+
+test("시간제한 모집·진행·종료 카드에 남은 시간과 승자를 표시한다", () => {
+  const timedSession = {
+    ...session,
+    ruleType: "timed",
+    durationMinutes: 180,
+    status: "active",
+    createdAt: "2026-09-03T09:00:00.000Z",
+    expiresAt: "2026-09-03T12:00:00.000Z",
+  };
+  const summary = {
+    session: timedSession,
+    teams: [
+      { teamKey: "A", score: 18, players: [] },
+      { teamKey: "B", score: 15, players: [] },
+    ],
+  };
+
+  const lobby = buildKillRaceLobbyEmbed(summary).toJSON();
+  const active = buildKillRaceActiveEmbed(summary).toJSON();
+  const completed = buildKillRaceActiveEmbed({
+    ...summary,
+    session: { ...timedSession, status: "completed" },
+  }).toJSON();
+
+  assert.match(lobby.description, /시간제한 \*\*3시간\*\*/);
+  assert.equal(active.title, "킬내기 3시간 · 3대3");
+  assert.match(active.description, /자동 종료:/);
+  assert.match(completed.description, /TEAM A 승리/);
 });
 
 test("전체 전적과 티어별 상대전적을 별도 화면으로 구성한다", () => {

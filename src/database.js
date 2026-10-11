@@ -7,7 +7,7 @@ import {
 } from "./kill-race-config.js";
 import { summarizeKillRaceHistory } from "./kill-race-history.js";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const DATA_PARSER_VERSION = 1;
 
 const REGISTERED_PLAYERS_SCHEMA = `
@@ -86,7 +86,10 @@ const KILL_RACE_SCHEMA = `
     channel_id TEXT NOT NULL,
     owner_user_id TEXT NOT NULL,
     mode TEXT NOT NULL CHECK (mode IN ('2v2', '3v3', '4v4', '2v2v2')),
+    rule_type TEXT NOT NULL DEFAULT 'score' CHECK (rule_type IN ('score', 'timed')),
     target_score INTEGER NOT NULL CHECK (target_score > 0),
+    duration_minutes INTEGER CHECK (duration_minutes IS NULL OR duration_minutes > 0),
+    expires_at TEXT,
     sheet_id TEXT NOT NULL,
     sheet_url TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -282,6 +285,13 @@ function hasRegisteredPlayerDisplayName(database) {
     .some((column) => column.name === "display_name");
 }
 
+function hasColumn(database, tableName, columnName) {
+  return database
+    .prepare(`PRAGMA table_info(${tableName});`)
+    .all()
+    .some((column) => column.name === columnName);
+}
+
 function createCurrentSchema(database) {
   database.exec(`
     ${REGISTERED_PLAYERS_SCHEMA}
@@ -334,7 +344,40 @@ function migrateVersion3To4(database) {
     database.exec(`
       BEGIN IMMEDIATE;
       ${addDisplayNameColumn}
-      PRAGMA user_version = ${SCHEMA_VERSION};
+      PRAGMA user_version = 4;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) {
+      database.exec("ROLLBACK;");
+    }
+    throw error;
+  }
+}
+
+function migrateVersion4To5(database) {
+  database.exec(KILL_RACE_SCHEMA);
+  const addRuleType = hasColumn(database, "kill_race_sessions", "rule_type")
+    ? ""
+    : "ALTER TABLE kill_race_sessions ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'score';";
+  const addDurationMinutes = hasColumn(
+    database,
+    "kill_race_sessions",
+    "duration_minutes",
+  )
+    ? ""
+    : "ALTER TABLE kill_race_sessions ADD COLUMN duration_minutes INTEGER;";
+  const addExpiresAt = hasColumn(database, "kill_race_sessions", "expires_at")
+    ? ""
+    : "ALTER TABLE kill_race_sessions ADD COLUMN expires_at TEXT;";
+
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${addRuleType}
+      ${addDurationMinutes}
+      ${addExpiresAt}
+      PRAGMA user_version = 5;
       COMMIT;
     `);
   } catch (error) {
@@ -442,6 +485,11 @@ function initializeDatabase(database) {
 
   if (currentVersion === 3) {
     migrateVersion3To4(database);
+    currentVersion = 4;
+  }
+
+  if (currentVersion === 4) {
+    migrateVersion4To5(database);
     return;
   }
 
@@ -854,7 +902,9 @@ export class BotRepository {
     channelId,
     ownerUserId,
     mode,
+    ruleType = "score",
     targetScore,
+    durationMinutes,
     sheetId,
     sheetUrl,
     ownerMember,
@@ -872,16 +922,18 @@ export class BotRepository {
       const result = this.database
         .prepare(`
           INSERT INTO kill_race_sessions (
-            guild_id, channel_id, owner_user_id, mode, target_score,
-            sheet_id, sheet_url, created_at, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'recruiting')
+            guild_id, channel_id, owner_user_id, mode, rule_type, target_score,
+            duration_minutes, sheet_id, sheet_url, created_at, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'recruiting')
         `)
         .run(
           guildId,
           channelId,
           ownerUserId,
           mode,
+          ruleType,
           targetScore,
+          durationMinutes ?? null,
           sheetId,
           sheetUrl,
           now,
@@ -922,7 +974,10 @@ export class BotRepository {
           channel_id AS channelId,
           owner_user_id AS ownerUserId,
           mode,
+          rule_type AS ruleType,
           target_score AS targetScore,
+          duration_minutes AS durationMinutes,
+          expires_at AS expiresAt,
           sheet_id AS sheetId,
           sheet_url AS sheetUrl,
           created_at AS createdAt,
@@ -945,7 +1000,10 @@ export class BotRepository {
           channel_id AS channelId,
           owner_user_id AS ownerUserId,
           mode,
+          rule_type AS ruleType,
           target_score AS targetScore,
+          duration_minutes AS durationMinutes,
+          expires_at AS expiresAt,
           sheet_id AS sheetId,
           sheet_url AS sheetUrl,
           created_at AS createdAt,
@@ -971,7 +1029,10 @@ export class BotRepository {
           channel_id AS channelId,
           owner_user_id AS ownerUserId,
           mode,
+          rule_type AS ruleType,
           target_score AS targetScore,
+          duration_minutes AS durationMinutes,
+          expires_at AS expiresAt,
           sheet_id AS sheetId,
           sheet_url AS sheetUrl,
           created_at AS createdAt,
@@ -1105,18 +1166,26 @@ export class BotRepository {
     }
   }
 
-  startKillRaceSession(sessionId, baselineMatchIds = []) {
-    const startedAt = new Date().toISOString();
+  startKillRaceSession(sessionId, baselineMatchIds = [], startedAtValue = new Date()) {
+    const session = this.getKillRaceSession(sessionId);
+    const startedAtDate = new Date(startedAtValue);
+    const startedAt = startedAtDate.toISOString();
+    const expiresAt =
+      session?.ruleType === "timed"
+        ? new Date(
+            startedAtDate.getTime() + Number(session.durationMinutes) * 60_000,
+          ).toISOString()
+        : null;
     this.database.exec("BEGIN IMMEDIATE;");
 
     try {
       const result = this.database
         .prepare(`
           UPDATE kill_race_sessions
-          SET status = 'active', started_at = ?, last_synced_at = ?
+          SET status = 'active', started_at = ?, expires_at = ?, last_synced_at = ?
           WHERE id = ? AND status = 'recruiting'
         `)
-        .run(startedAt, startedAt, sessionId);
+        .run(startedAt, expiresAt, startedAt, sessionId);
 
       if (result.changes === 0) {
         this.database.exec("ROLLBACK;");

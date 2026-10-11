@@ -22,7 +22,7 @@ test("3대3 참가자와 점수 규칙을 2팀 입력 시트에 초기화한다"
   const updates = new Map(
     requests[1].body.data.map((range) => [range.range, range.values]),
   );
-  assert.deepEqual(updates.get("'2팀 입력'!E3"), [[30]]);
+  assert.deepEqual(updates.get("'2팀 입력'!E3"), [["30점"]]);
   assert.deepEqual(updates.get("'2팀 입력'!K3"), [[-1]]);
   assert.match(updates.get("'2팀 입력'!A12")[0][0], /블루칩으로 살아남거나 치킨이면/);
   assert.deepEqual(updates.get("'2팀 입력'!A7:A10"), [
@@ -47,6 +47,27 @@ test("3대3 참가자와 점수 규칙을 2팀 입력 시트에 초기화한다"
   assert.match(updates.get("'2팀 점수판'!A5")[0][0], /\$H\$3\*2/);
   assert.match(updates.get("'2팀 점수판'!A6")[0][0], /\$H\$3\*3/);
   assert.match(updates.get("'2팀 점수판'!A7")[0][0], /\$H\$3\*4/);
+});
+
+test("시간제한 킬내기는 점수판 제목에 제한시간을 표시한다", async () => {
+  const requests = [];
+  const client = testClient(requests);
+
+  await client.initializeRace(
+    { mode: "2v2", ruleType: "timed", targetScore: 30, durationMinutes: 180 },
+    [
+      member("A", 1, "민재"),
+      member("A", 2, "승환"),
+      member("B", 1, "재현"),
+      member("B", 2, "민우"),
+    ],
+  );
+
+  const updates = new Map(
+    requests[1].body.data.map((range) => [range.range, range.values]),
+  );
+  assert.deepEqual(updates.get("'2팀 입력'!E3"), [["3시간"]]);
+  assert.doesNotMatch(updates.get("'2팀 점수판'!A1")[0][0], /점"/);
 });
 
 test("팀별 경기 결과를 선수 슬롯에 맞춰 시트 한 행에 기록한다", async () => {

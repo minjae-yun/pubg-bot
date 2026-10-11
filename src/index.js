@@ -4,6 +4,7 @@ import { createMatchDataCollector } from "./data-collection/sanhok-collector.js"
 import { optionalEnv, positiveNumberEnv, requireEnv } from "./env.js";
 import { createInteractionHandler } from "./interaction-handler.js";
 import { createGoogleSheetsClient } from "./google-sheets.js";
+import { buildKillRaceActiveEmbed } from "./kill-race-embeds.js";
 import { KillRaceService } from "./kill-race-service.js";
 import { PubgApiClient } from "./pubg-api.js";
 
@@ -45,14 +46,25 @@ if (killRaceSheetId && googleServiceAccountKeyPath) {
     console.error("Google 시트 설정을 불러오지 못했습니다:", error.message);
   }
 }
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const killRaceService = new KillRaceService({
   pubgApi,
   repository,
   sheets,
   sheetUrl: killRaceSheetUrl,
   refreshIntervalMs: killRaceRefreshIntervalMs,
+  onAutoComplete: async (result) => {
+    const channel = await client.channels.fetch(result.summary.session.channelId);
+    if (!channel?.isTextBased() || typeof channel.send !== "function") {
+      throw new Error("자동 종료 결과를 보낼 수 있는 채널이 아닙니다.");
+    }
+
+    await channel.send({
+      content: "시간제한 킬내기가 자동 종료되었습니다.",
+      embeds: [buildKillRaceActiveEmbed(result.summary, result)],
+    });
+  },
 });
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`${readyClient.user.tag} 치킨로그 봇이 준비되었습니다.`);

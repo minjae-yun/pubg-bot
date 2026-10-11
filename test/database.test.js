@@ -176,6 +176,40 @@ test("킬내기 참가 순서에 따라 티어별 킬 점수를 계산한다", (
   repository.close();
 });
 
+test("시간제한 킬내기는 출발 시각을 기준으로 자동 종료 시각을 저장한다", () => {
+  const repository = createRepository(":memory:");
+  const owner = {
+    discordUserId: "owner-1",
+    displayName: "민재",
+    accountId: "account-owner",
+    playerName: "PUBGOwner",
+  };
+  const { session } = repository.createKillRaceSession({
+    guildId: "guild-1",
+    channelId: "channel-1",
+    ownerUserId: owner.discordUserId,
+    mode: "2v2",
+    ruleType: "timed",
+    targetScore: 30,
+    durationMinutes: 180,
+    sheetId: "sheet-1",
+    sheetUrl: "https://docs.google.com/spreadsheets/d/sheet-1/edit",
+    ownerMember: owner,
+  });
+
+  const started = repository.startKillRaceSession(
+    session.id,
+    [],
+    new Date("2026-10-11T09:00:00.000Z"),
+  );
+
+  assert.equal(started.ruleType, "timed");
+  assert.equal(started.durationMinutes, 180);
+  assert.equal(started.startedAt, "2026-10-11T09:00:00.000Z");
+  assert.equal(started.expiresAt, "2026-10-11T12:00:00.000Z");
+  repository.close();
+});
+
 test("플레이어 등록과 파티 세션을 SQLite에 저장한다", () => {
   const repository = createRepository(":memory:");
 
@@ -480,7 +514,7 @@ test("기존 SQLite 파티 기록을 새 상태 스키마로 안전하게 이전
     assert.equal(repository.getPartyMembers(7)[0].playerName, "PlayerOne");
     assert.equal(
       repository.database.prepare("PRAGMA user_version;").get().user_version,
-      4,
+      5,
     );
     assert.deepEqual(repository.database.prepare("PRAGMA foreign_key_check;").all(), []);
 
@@ -537,7 +571,7 @@ test("스키마 V1 데이터를 보존하면서 사녹 수집 테이블을 추�
 
     assert.equal(
       migratedRepository.database.prepare("PRAGMA user_version;").get().user_version,
-      4,
+      5,
     );
     assert.equal(
       migratedRepository.getPlayer("guild-1", "user-1").playerName,
@@ -603,7 +637,7 @@ test("스키마 V3의 기존 플레이어 ID와 등록 정보를 보존하며 �
     assert.equal(existingPlayer.createdAt, "2026-08-20T10:00:00.000Z");
     assert.equal(
       repository.database.prepare("PRAGMA user_version;").get().user_version,
-      4,
+      5,
     );
 
     repository.upsertPlayer({
@@ -624,6 +658,59 @@ test("스키마 V3의 기존 플레이어 ID와 등록 정보를 보존하며 �
         .prepare("SELECT COUNT(*) AS count FROM registered_players")
         .get().count,
       1,
+    );
+    repository.close();
+  } finally {
+    rmSync(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
+test("스키마 V4의 기존 킬내기를 목표점수 방식으로 보존한다", () => {
+  const temporaryDirectory = mkdtempSync(join(tmpdir(), "pubg-bot-v5-migration-"));
+  const databasePath = join(temporaryDirectory, "version-4.sqlite");
+  const versionFourDatabase = new DatabaseSync(databasePath);
+
+  versionFourDatabase.exec(`
+    CREATE TABLE kill_race_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      owner_user_id TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      target_score INTEGER NOT NULL,
+      sheet_id TEXT NOT NULL,
+      sheet_url TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      started_at TEXT,
+      ended_at TEXT,
+      last_synced_at TEXT,
+      status TEXT NOT NULL
+    );
+
+    INSERT INTO kill_race_sessions (
+      id, guild_id, channel_id, owner_user_id, mode, target_score,
+      sheet_id, sheet_url, created_at, status
+    ) VALUES (
+      9, 'guild-1', 'channel-1', 'owner-1', '3v3', 30,
+      'sheet-1', 'https://example.com/sheet-1',
+      '2026-09-03T09:00:00.000Z', 'completed'
+    );
+
+    PRAGMA user_version = 4;
+  `);
+  versionFourDatabase.close();
+
+  try {
+    const repository = createRepository(databasePath);
+    const session = repository.getKillRaceSession(9);
+
+    assert.equal(session.ruleType, "score");
+    assert.equal(session.targetScore, 30);
+    assert.equal(session.durationMinutes, null);
+    assert.equal(session.expiresAt, null);
+    assert.equal(
+      repository.database.prepare("PRAGMA user_version;").get().user_version,
+      5,
     );
     repository.close();
   } finally {

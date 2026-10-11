@@ -12,12 +12,16 @@ export class KillRaceService {
     sheets,
     sheetUrl,
     refreshIntervalMs = 20_000,
+    onAutoComplete,
+    now = () => new Date(),
   }) {
     this.pubgApi = pubgApi;
     this.repository = repository;
     this.sheets = sheets;
     this.sheetUrl = sheetUrl;
     this.refreshIntervalMs = refreshIntervalMs;
+    this.onAutoComplete = onAutoComplete;
+    this.now = now;
     this.locks = new Map();
     this.timer = undefined;
   }
@@ -68,6 +72,7 @@ export class KillRaceService {
       const startedSession = this.repository.startKillRaceSession(
         sessionId,
         baselineMatchIds,
+        this.now(),
       );
 
       if (!startedSession) {
@@ -89,6 +94,15 @@ export class KillRaceService {
             : undefined,
         };
       }
+
+      const now = this.now();
+      const expiresAt = session.expiresAt ? new Date(session.expiresAt) : undefined;
+      const autoComplete =
+        session.ruleType === "timed" &&
+        expiresAt &&
+        !Number.isNaN(expiresAt.getTime()) &&
+        now >= expiresAt;
+      const matchCutoff = autoComplete ? expiresAt : now;
 
       await this.flushPendingRows(session);
       const mode = getKillRaceMode(session.mode);
@@ -118,7 +132,11 @@ export class KillRaceService {
       const orderedMatches = rawMatches
         .filter((match) => {
           const createdAt = new Date(match?.data?.attributes?.createdAt);
-          return !Number.isNaN(createdAt.getTime()) && createdAt >= new Date(session.startedAt);
+          return (
+            !Number.isNaN(createdAt.getTime()) &&
+            createdAt >= new Date(session.startedAt) &&
+            createdAt <= matchCutoff
+          );
         })
         .sort((left, right) =>
           left.data.attributes.createdAt.localeCompare(right.data.attributes.createdAt),
@@ -132,6 +150,7 @@ export class KillRaceService {
               match,
               members: members.filter((member) => member.teamKey === teamKey),
               startedAt: session.startedAt,
+              endedAt: matchCutoff,
             }),
           ),
         }))
@@ -154,6 +173,7 @@ export class KillRaceService {
             telemetry,
             members: members.filter((member) => member.teamKey === teamKey),
             startedAt: session.startedAt,
+            endedAt: matchCutoff,
           });
           if (!result) {
             continue;
@@ -172,8 +192,12 @@ export class KillRaceService {
 
       await this.flushPendingRows(session);
       this.repository.touchKillRaceSync(sessionId);
+      if (autoComplete) {
+        this.repository.completeKillRaceSession(sessionId);
+      }
       return {
         addedMatches,
+        autoCompleted: Boolean(autoComplete),
         summary: this.repository.getKillRaceSummary(sessionId),
       };
     });
@@ -202,7 +226,17 @@ export class KillRaceService {
       }
 
       try {
-        await this.syncSession(session.id);
+        const result = await this.syncSession(session.id);
+        if (result.autoCompleted && this.onAutoComplete) {
+          try {
+            await this.onAutoComplete(result);
+          } catch (error) {
+            console.error(
+              `킬내기 #${session.id} 자동 종료 알림 실패:`,
+              error?.message || error,
+            );
+          }
+        }
       } catch (error) {
         console.error(
           `킬내기 #${session.id} 자동 갱신 실패:`,
@@ -222,6 +256,7 @@ export class KillRaceService {
       this.refreshIntervalMs,
     );
     this.timer.unref?.();
+    void this.syncAllActiveSessions();
   }
 
   stopPolling() {

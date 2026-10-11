@@ -56,5 +56,11 @@ test("등록과 파티 명령어를 함께 제공한다", () => {
     killRaceCommand.options[0].choices.map((choice) => choice.value),
     ["2v2", "3v3", "4v4", "2v2v2"],
   );
-  assert.equal(killRaceCommand.options[1].name, "목표점수");
+  assert.equal(killRaceCommand.options[1].name, "진행방식");
+  assert.deepEqual(
+    killRaceCommand.options[1].choices.map((choice) => choice.value),
+    ["score", "timed"],
+  );
+  assert.equal(killRaceCommand.options[2].name, "목표점수");
+  assert.equal(killRaceCommand.options[3].name, "제한시간");
 });
