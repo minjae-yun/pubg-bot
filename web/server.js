@@ -6,8 +6,8 @@
 import "dotenv/config";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { createReadStream, mkdirSync } from "node:fs";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, extname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -38,7 +38,7 @@ const WEAPONS = {
   WeapMP5K_C: ["MP5K", "SMG"], WeapUMP_C: ["UMP45", "SMG"], WeapVector_C: ["Vector", "SMG"],
   WeapUZI_C: ["Micro UZI", "SMG"], WeapThompson_C: ["Tommy Gun", "SMG"], WeapBizonPP19_C: ["PP-19 Bizon", "SMG"],
   WeapSaiga12_C: ["S12K", "SG"], WeapBerreta686_C: ["S686", "SG"],
-  WeapM249_C: ["M249", "LMG"], WeapRPD_C: ["DP-28", "LMG"], WeapMG3_C: ["MG3", "LMG"],
+  WeapM249_C: ["M249", "LMG"], WeapRPD_C: ["RPD", "LMG"], WeapMG3_C: ["MG3", "LMG"],
   ProjGrenade_C: ["수류탄", "기타"], ProjMolotov_C: ["화염병", "기타"],
   WeapPan_C: ["프라이팬", "기타"], PanzerFaust100M_Projectile_C: ["판처파우스트", "기타"]
 };
@@ -691,7 +691,84 @@ function validateHighlightMetadata({ accountId, title, description, matchId }) {
   }
 }
 
-async function serveStatic(pathname, res) {
+function sendUploadRangeError(res, size) {
+  res.writeHead(416, {
+    "Content-Range": `bytes */${size}`,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=86400"
+  });
+  res.end();
+}
+
+function pipeFile(res, filePath, options) {
+  const stream = createReadStream(filePath, options);
+  stream.on("error", error => res.destroy(error));
+  stream.pipe(res);
+}
+
+async function serveUpload(pathname, req, res) {
+  let filename;
+  try {
+    filename = decodeURIComponent(pathname.slice("/uploads/".length));
+  } catch {
+    return send(res, 400, { error: "잘못된 파일 경로" });
+  }
+
+  if (!filename || basename(filename) !== filename) return send(res, 400, { error: "잘못된 파일 경로" });
+
+  const filePath = join(HIGHLIGHT_DIR, filename);
+  let fileInfo;
+  try {
+    fileInfo = await stat(filePath);
+    if (!fileInfo.isFile()) throw new Error("not a file");
+  } catch {
+    return send(res, 404, { error: "파일을 찾을 수 없어요" });
+  }
+
+  const size = fileInfo.size;
+  const headers = {
+    "Content-Type": STATIC_TYPES[extname(filename).toLowerCase()] ?? "application/octet-stream",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=86400",
+    "Access-Control-Allow-Origin": "*"
+  };
+  const range = String(req.headers.range ?? "").trim();
+
+  if (!range) {
+    res.writeHead(200, { ...headers, "Content-Length": size });
+    return pipeFile(res, filePath);
+  }
+
+  const match = range.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || (!match[1] && !match[2]) || size === 0) return sendUploadRangeError(res, size);
+
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return sendUploadRangeError(res, size);
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return sendUploadRangeError(res, size);
+    end = Math.min(end, size - 1);
+  }
+
+  if (start < 0 || start >= size || end < start) return sendUploadRangeError(res, size);
+
+  res.writeHead(206, {
+    ...headers,
+    "Content-Range": `bytes ${start}-${end}/${size}`,
+    "Content-Length": end - start + 1
+  });
+  return pipeFile(res, filePath, { start, end });
+}
+
+async function serveStatic(pathname, req, res) {
+  if (pathname.startsWith("/uploads/")) return serveUpload(pathname, req, res);
+
   const file = pathname === "/" ? "index.html" : pathname.slice(1);
   if (file.includes("..")) return send(res, 400, { error: "잘못된 경로" });
   try {
@@ -729,7 +806,7 @@ const server = createServer(async (req, res) => {
     }
     return send(res, 404, { error: "없는 API 주소예요" });
   }
-  return serveStatic(url.pathname, res);
+  return serveStatic(url.pathname, req, res);
 });
 
 server.listen(PORT, HOST, () => {
