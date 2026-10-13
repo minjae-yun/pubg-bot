@@ -17,6 +17,7 @@ const DB_PATH = resolve(ROOT, process.env.DATABASE_PATH ?? "data/bot.sqlite");
 const PORT = Number(process.env.WEB_PORT ?? 3000);
 const HOST = process.env.WEB_HOST ?? "127.0.0.1";
 const PUBLIC_DIR = join(ROOT, "web", "public");
+const PATCH_FILE = join(ROOT, "web", "content", "patches.json");
 const WEB_DATA_DIR = join(ROOT, "web", "data");
 const HIGHLIGHT_DIR = join(PUBLIC_DIR, "uploads");
 const WEB_DB_PATH = join(WEB_DATA_DIR, "droplog.sqlite");
@@ -553,39 +554,24 @@ function listHighlights(limit = 50, accountId = "") {
   });
 }
 
-let newsCache = { at: 0, items: [] };
-function cleanNewsText(value = "") {
-  return value.replace(/\{STEAM_CLAN_IMAGE\}\/[^\s]+/g, "").replace(/\[[^\]]+\]/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-async function getUpdates(limit = 8) {
+async function getPatches(limit = 8) {
   const size = Math.min(20, Math.max(1, Number(limit) || 8));
-  if (Date.now() - newsCache.at < 60 * 60 * 1000 && newsCache.items.length) return newsCache.items.slice(0, size);
-  try {
-    const url = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=578080&count=30&maxlength=500&format=json";
-    const response = await fetch(url, { signal: AbortSignal.timeout(6000) });
-    if (!response.ok) throw new Error(`Steam ${response.status}`);
-    const body = await response.json();
-    const items = (body.appnews?.newsitems ?? [])
-      .filter(item => /patch notes|update|map service|hotfix/i.test(item.title))
-      .filter(item => !/store update|esports|workshop/i.test(item.title))
-      .map(item => ({
-        id: item.gid,
-        title: item.title,
-        date: toDate(new Date(item.date * 1000).toISOString()),
-        summary: cleanNewsText(item.contents) || "공식 공지에서 세부 변경사항을 확인하세요.",
-        url: item.url,
-        tags: [/patch|update/i.test(item.title) ? "change" : "return"]
-      }));
-    newsCache = { at: Date.now(), items };
-  } catch (error) {
-    console.error("업데이트 소식을 가져오지 못했습니다:", error.message);
-    if (!newsCache.items.length) newsCache.items = [{
-      id: "official", title: "PUBG 공식 패치 노트", date: null,
-      summary: "공식 PUBG 사이트에서 최신 변경사항을 확인하세요.",
-      url: "https://pubg.com/ko/news?category=patch_notes", tags: ["change"]
-    }];
-  }
-  return newsCache.items.slice(0, size);
+  const document = JSON.parse(await readFile(PATCH_FILE, "utf8"));
+  const allowedTags = new Set(["buff", "nerf", "change", "return", "new"]);
+  const items = Array.isArray(document) ? document : document.items;
+  if (!Array.isArray(items)) throw new Error("web/content/patches.json의 items가 배열이 아니에요");
+  return items.slice(0, size).map((item, index) => ({
+    id: String(item.id ?? `patch-${index + 1}`),
+    version: String(item.version ?? "UPDATE"),
+    date: item.date ? String(item.date) : null,
+    title: String(item.title ?? "제목 없음"),
+    summary: String(item.summary ?? ""),
+    tags: Array.isArray(item.tags) ? item.tags.filter(tag => allowedTags.has(tag)) : [],
+    impact: item.impact ? String(item.impact) : "",
+    url: item.sourceUrl ? String(item.sourceUrl) : "https://pubg.com/ko/news?category=patch_notes",
+    weapons: Array.isArray(item.weapons) ? item.weapons : [],
+    returns: Array.isArray(item.returns) ? item.returns : []
+  }));
 }
 
 /* ---------- HTTP ---------- */
@@ -609,7 +595,7 @@ const routes = [
   [/^\/api\/missions\/hall-of-fame$/, () => getMissionHallOfFame()],
   [/^\/api\/highlights\/config$/, () => ({ uploadEnabled: Boolean(WEB_ADMIN_KEY), maxUploadMb: Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024) })],
   [/^\/api\/highlights$/, (_, url) => listHighlights(url.searchParams.get("limit"), url.searchParams.get("player") ?? "")],
-  [/^\/api\/updates$/, (_, url) => getUpdates(url.searchParams.get("limit"))]
+  [/^\/api\/patches$/, (_, url) => getPatches(url.searchParams.get("limit"))]
 ];
 
 function send(res, status, body, type = "application/json; charset=utf-8") {
