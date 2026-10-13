@@ -82,14 +82,12 @@ test("파티 시작 이후 매치에서 멤버 기록과 어워드를 계산한�
   assert.equal(report.bestPlacement, 2);
   assert.equal(report.totalKills, 2);
   assert.equal(report.averageTeamDamage, 600);
-  assert.equal(report.awards.mvp.discordUserId, "user-1");
-  assert.equal(report.awards.killKing.discordUserId, "user-1");
-  assert.equal(report.awards.damageKing.discordUserId, "user-1");
+  assert.equal(report.awards.ace.discordUserId, "user-1");
+  assert.deepEqual(report.awards.squadBreaker, []);
   assert.deepEqual(
     report.awards.trolls.map((player) => player.discordUserId),
-    ["user-2"],
+    [],
   );
-  assert.match(report.awards.trolls[0].trollReasons[0], /팀 내 최저/);
 });
 
 test("팀킬한 사람이 여러 명이면 모두 공동 인간쓰레기로 선정한다", () => {
@@ -136,21 +134,37 @@ test("팀 평균 기여도의 절반 이하인 플레이어를 인간쓰레기�
   assert.match(report.awards.trolls[0].trollReasons[0], /인분/);
 });
 
-test("아군을 기절시킨 플레이어는 긍정 어워드에서 제외한다", () => {
+test("기여도가 정확히 0.5인분이면 인간쓰레기로 선정한다", () => {
+  const match = {
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { damage: 300 }),
+      partyPlayer("user-2", { damage: 100 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.equal(report.players[1].contributionRatio, 0.5);
+  assert.equal(report.awards.trolls.length, 1);
+  assert.equal(report.awards.trolls[0].discordUserId, "user-2");
+});
+
+test("팀킬한 플레이어는 성적이 가장 좋아도 ACE에서 제외한다", () => {
   const match = {
     bestPlacement: 2,
     players: [
       partyPlayer("user-1", {
-        kills: 2,
-        assists: 1,
-        damage: 300,
+        kills: 10,
+        assists: 3,
+        damage: 1_200,
         deaths: 0,
-        friendlyKnocks: 1,
+        friendlyKills: 1,
       }),
       partyPlayer("user-2", {
-        kills: 2,
-        assists: 1,
-        damage: 300,
+        kills: 8,
+        assists: 2,
+        damage: 1_000,
         deaths: 1,
       }),
     ],
@@ -159,10 +173,86 @@ test("아군을 기절시킨 플레이어는 긍정 어워드에서 제외한다
   const report = buildPartyReport([match], members);
 
   assert.equal(report.awards.trolls[0].discordUserId, "user-1");
-  assert.equal(report.awards.trolls[0].trollReasons[0], "아군 기절 1회");
-  assert.equal(report.awards.mvp.discordUserId, "user-2");
-  assert.equal(report.awards.killKing.discordUserId, "user-2");
-  assert.equal(report.awards.damageKing.discordUserId, "user-2");
+  assert.equal(report.awards.trolls[0].trollReasons[0], "팀킬 1회");
+  assert.equal(report.awards.ace.discordUserId, "user-2");
+});
+
+test("모든 플레이어가 오늘의 씹쓰레기면 ACE를 선정하지 않는다", () => {
+  const match = {
+    bestPlacement: 2,
+    players: [
+      partyPlayer("user-1", { kills: 3, damage: 500, friendlyKills: 1 }),
+      partyPlayer("user-2", { kills: 2, damage: 400, friendlyKnocks: 1 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.deepEqual(
+    report.awards.trolls.map((player) => player.discordUserId),
+    ["user-1", "user-2"],
+  );
+  assert.equal(report.awards.ace, null);
+});
+
+test("ACE는 평균 딜, 평균 킬, 평균 도움만으로 계산한다", () => {
+  const match = {
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { damage: 300, revives: 0 }),
+      partyPlayer("user-2", { damage: 200, revives: 10 }),
+    ],
+  };
+
+  const report = buildPartyReport([match], members);
+
+  assert.equal(report.awards.ace.discordUserId, "user-1");
+  assert.equal(report.players[0].contributionScore, 300);
+  assert.equal(report.players[1].contributionScore, 200);
+});
+
+test("파티 전체 경기의 최고 동일 스쿼드 처치 기록으로 공동 수상자를 정한다", () => {
+  const matches = [
+    {
+      matchId: "match-1",
+      bestPlacement: 5,
+      players: [
+        partyPlayer("user-1", { squadBreakerCount: 3 }),
+        partyPlayer("user-2", { squadBreakerCount: 2 }),
+      ],
+    },
+    {
+      matchId: "match-2",
+      bestPlacement: 4,
+      players: [
+        partyPlayer("user-1", { squadBreakerCount: 1 }),
+        partyPlayer("user-2", { squadBreakerCount: 3 }),
+      ],
+    },
+  ];
+
+  const report = buildPartyReport(matches, members);
+
+  assert.deepEqual(
+    report.awards.squadBreaker.map((player) => player.discordUserId),
+    ["user-1", "user-2"],
+  );
+  assert.equal(report.players[0].squadBreakerCount, 3);
+  assert.equal(report.players[0].squadBreakerMatchId, "match-1");
+  assert.equal(report.players[1].squadBreakerMatchId, "match-2");
+});
+
+test("동일 적 스쿼드 최고 기록이 1명이면 SQUAD BREAKER를 숨긴다", () => {
+  const match = {
+    matchId: "match-1",
+    bestPlacement: 5,
+    players: [
+      partyPlayer("user-1", { squadBreakerCount: 1 }),
+      partyPlayer("user-2", { squadBreakerCount: 0 }),
+    ],
+  };
+
+  assert.deepEqual(buildPartyReport([match], members).awards.squadBreaker, []);
 });
 
 test("파티 시작 전 매치는 제외한다", () => {
@@ -182,6 +272,41 @@ test("파티 시작 전 매치는 제외한다", () => {
   );
 });
 
+test("치킨을 먹어도 먼저 사망한 파티원은 사망으로 기록한다", () => {
+  const match = {
+    data: {
+      id: "match-win",
+      attributes: {
+        createdAt: "2026-07-23T12:10:00.000Z",
+        gameMode: "squad-fpp",
+      },
+    },
+    included: [
+      {
+        type: "participant",
+        attributes: {
+          stats: {
+            playerId: "account-1",
+            name: "PlayerOne",
+            deathType: "byplayer",
+            winPlace: 1,
+          },
+        },
+      },
+    ],
+  };
+
+  const extracted = extractPartyMatch(
+    match,
+    members,
+    "2026-07-23T12:00:00.000Z",
+    new Date("2026-07-23T13:00:00.000Z"),
+  );
+
+  assert.equal(extracted.players[0].placement, 1);
+  assert.equal(extracted.players[0].deaths, 1);
+});
+
 function partyPlayer(
   discordUserId,
   {
@@ -192,6 +317,7 @@ function partyPlayer(
     friendlyKills = 0,
     friendlyKnocks = 0,
     deaths = 1,
+    squadBreakerCount = 0,
   } = {},
 ) {
   return {
@@ -203,6 +329,7 @@ function partyPlayer(
     friendlyKills,
     friendlyKnocks,
     deaths,
+    squadBreakerCount,
     headshotKills: 0,
     placement: 5,
     survivalSeconds: 1000,

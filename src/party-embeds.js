@@ -4,21 +4,22 @@ import {
   ButtonStyle,
   EmbedBuilder,
 } from "discord.js";
+import { getMissionDefinition } from "./missions.js";
 
 const integerFormatter = new Intl.NumberFormat("ko-KR", {
   maximumFractionDigits: 0,
 });
 
 export function buildPartyLobbyEmbed(session, members) {
-  const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const createdTimestamp = Math.floor(new Date(session.createdAt).getTime() / 1_000);
   const memberList = members.map((member) => `<@${member.discordUserId}>`).join("\n");
 
   return new EmbedBuilder()
     .setColor(0xf2a900)
-    .setTitle("🍗 스쿼드 기록을 시작했습니다")
+    .setTitle("스쿼드 파티원을 모집합니다")
     .setDescription(
       "함께 플레이할 멤버는 아래 **파티 참가** 버튼을 눌러주세요. " +
-        "게임이 끝나면 파티장이 **결산하기**를 누르면 됩니다. " +
+        "모두 모이면 파티장이 **파티 출발**을 눌러 참가자 명단을 확정합니다. " +
         "경기 없이 끝낼 때는 **파티 취소**를 눌러주세요.",
     )
     .addFields(
@@ -28,8 +29,8 @@ export function buildPartyLobbyEmbed(session, members) {
         inline: true,
       },
       {
-        name: "시작 시각",
-        value: `<t:${startedTimestamp}:R>`,
+        name: "모집 시작",
+        value: `<t:${createdTimestamp}:R>`,
         inline: true,
       },
       {
@@ -41,28 +42,128 @@ export function buildPartyLobbyEmbed(session, members) {
     .setFooter({ text: "참가하려면 먼저 /등록 닉네임을 실행해야 합니다." });
 }
 
-export function buildPartyButtons(sessionId) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`party:join:${sessionId}`)
-      .setLabel("파티 참가")
-      .setEmoji("🙋")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`party:summary:${sessionId}`)
-      .setLabel("결산하기")
-      .setEmoji("📊")
-      .setStyle(ButtonStyle.Success),
+export function buildPartyActiveEmbed(session, members, missions = []) {
+  const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const memberList = members.map((member) => `<@${member.discordUserId}>`).join("\n");
+  const missionLines = [...missions]
+    .sort((left, right) => {
+      if (left.scope !== right.scope) {
+        return left.scope === "team" ? -1 : 1;
+      }
+
+      return left.key.localeCompare(right.key);
+    })
+    .map((mission) => {
+      const definition = getMissionDefinition(mission.key);
+      const scope = mission.scope === "team" ? "TEAM" : "PERSONAL";
+      return `**${scope} · ${definition?.name ?? mission.key}** · ${mission.rewardPoints}P\n${definition?.description ?? mission.key}`;
+    });
+
+  const embed = new EmbedBuilder()
+    .setColor(0xb7a36a)
+    .setTitle("스쿼드 파티가 출발했습니다")
+    .setDescription(
+      "참가자 명단이 확정되었습니다. 게임이 끝나면 파티장이 **결산하기**를 눌러주세요.",
+    )
+    .addFields(
+      {
+        name: "파티장",
+        value: `<@${session.ownerUserId}>`,
+        inline: true,
+      },
+      {
+        name: "출발 시각",
+        value: `<t:${startedTimestamp}:R>`,
+        inline: true,
+      },
+      {
+        name: `참가자 ${members.length}명 · 모집 마감`,
+        value: memberList,
+        inline: false,
+      },
+    );
+
+  if (missionLines.length > 0) {
+    embed.addFields({
+      name: "이번 파티 미션",
+      value: missionLines.join("\n\n"),
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
+export function buildPartyButtons(sessionId, status = "recruiting") {
+  const buttons = [];
+
+  if (status === "recruiting") {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`party:join:${sessionId}`)
+        .setLabel("파티 참가")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`party:start:${sessionId}`)
+        .setLabel("파티 출발")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  if (status === "active") {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`party:summary:${sessionId}`)
+        .setLabel("결산하기")
+        .setStyle(ButtonStyle.Success),
+    );
+  }
+
+  buttons.push(
     new ButtonBuilder()
       .setCustomId(`party:cancel:${sessionId}`)
       .setLabel("파티 취소")
-      .setEmoji("🛑")
       .setStyle(ButtonStyle.Danger),
+  );
+
+  return new ActionRowBuilder().addComponents(buttons);
+}
+
+export function buildPartyReviewButtons(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`party:refresh:${sessionId}`)
+      .setLabel("새로고침")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`party:missions:${sessionId}`)
+      .setLabel("미션 전체보기")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`party:ranking:${sessionId}`)
+      .setLabel("팀원 순위")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`party:confirm:${sessionId}`)
+      .setLabel("결산 확정")
+      .setStyle(ButtonStyle.Success),
   );
 }
 
-export function buildPartyReportEmbed(report, session) {
+export function buildPartyReportEmbed(
+  report,
+  session,
+  { reviewing = false, refreshedAt } = {},
+) {
   const awards = report.awards;
+  const squadBreakerWinners = awards.squadBreaker
+    .map((player) => `<@${player.discordUserId}>`)
+    .join(" · ");
+  const squadBreakerCount = awards.squadBreaker[0]?.squadBreakerCount ?? 0;
+  const missionLeaderNames = (awards.missionLeaders ?? [])
+    .map((player) => `<@${player.discordUserId}>`)
+    .join(" · ");
+  const missionLeaderPoints = awards.missionLeaders?.[0]?.points ?? 0;
   const trollWinners = awards.trolls
     .map(
       (player) =>
@@ -70,33 +171,54 @@ export function buildPartyReportEmbed(report, session) {
     )
     .join(", ");
   const awardLines = [
-    awards.mvp
-      ? `🏆 **오늘의 MVP** <@${awards.mvp.discordUserId}> (KDA ${formatRatio(awards.mvp.kda)})`
+    awards.ace
+      ? `**ACE** <@${awards.ace.discordUserId}> ` +
+        `(평균 ${awards.ace.averageKills.toFixed(1)}킬 · ` +
+        `${integerFormatter.format(awards.ace.averageDamage)}딜 · ` +
+        `${awards.ace.averageAssists.toFixed(1)}도움)`
       : null,
-    awards.killKing
-      ? `🎯 **킬왕** <@${awards.killKing.discordUserId}> (${integerFormatter.format(awards.killKing.kills)}킬)`
+    awards.squadBreaker.length > 0
+      ? `**SQUAD BREAKER** ${squadBreakerWinners} ` +
+        `(한 경기에서 동일 적 스쿼드 ${squadBreakerCount}명 처치)`
       : null,
-    awards.damageKing
-      ? `💥 **딜왕** <@${awards.damageKing.discordUserId}> (평균딜 ${integerFormatter.format(awards.damageKing.averageDamage)})`
+    trollWinners ? `**오늘의 씹쓰레기** ${trollWinners}` : null,
+    missionLeaderNames
+      ? `**미션 포인트 1위** ${missionLeaderNames} (${missionLeaderPoints}P)`
       : null,
-    `🤡 **오늘의 쓰레기** ${trollWinners}`,
   ].filter(Boolean);
   const playerLines = report.players.map(
     (player) =>
       `<@${player.discordUserId}> · ${player.matches}경기 · ${integerFormatter.format(player.kills)}킬 · ` +
       `KDA ${formatRatio(player.kda)} · 평균딜 ${integerFormatter.format(player.averageDamage)} · ` +
       `${player.contributionRatio.toFixed(2)}인분` +
+      ` · 미션 ${player.missionPoints ?? 0}P` +
       (player.friendlyKnocks > 0
         ? ` · 아군 기절 ${player.friendlyKnocks}회`
         : "") +
       (player.friendlyKills > 0 ? ` · 팀킬 ${player.friendlyKills}회` : ""),
   );
   const startedTimestamp = Math.floor(new Date(session.startedAt).getTime() / 1_000);
+  const missionLines = (report.missionReport?.missions ?? []).map((mission) => {
+    const winners = mission.completedBy
+      .map((discordUserId) => `<@${discordUserId}>`)
+      .join(" · ");
+    return winners
+      ? `**완료 · ${mission.name}** · ${mission.rewardPoints}P · ${winners}`
+      : `미완료 · ${mission.name} · ${mission.rewardPoints}P`;
+  });
 
-  return new EmbedBuilder()
-    .setColor(0x57f287)
-    .setTitle("🍗 오늘의 스쿼드 결산")
-    .setDescription(awardLines.join("\n"))
+  const embed = new EmbedBuilder()
+    .setColor(reviewing ? 0xfee75c : 0x57f287)
+    .setTitle(reviewing ? "스쿼드 결산 검토" : "🍗 오늘의 스쿼드 결산")
+    .setDescription(
+      reviewing
+        ? [
+            "아직 확정되지 않은 결산입니다. 마지막 경기가 빠졌다면 잠시 후 **새로고침**해 주세요.",
+            "",
+            ...awardLines,
+          ].join("\n")
+        : awardLines.join("\n"),
+    )
     .addFields(
       {
         name: "팀 기록",
@@ -115,10 +237,80 @@ export function buildPartyReportEmbed(report, session) {
       },
     )
     .setFooter({
-      text: "MVP는 파티 기간 KDA, 킬왕은 총킬, 딜왕은 평균딜 기준입니다.",
+      text: reviewing
+        ? "마지막 경기 반영 여부를 확인한 뒤 결산을 확정하세요."
+        : "ACE는 평균 딜 + 평균 킬×100 + 평균 도움×50 기준입니다.",
     })
-    .setTimestamp()
+    .setTimestamp(refreshedAt ? new Date(refreshedAt) : new Date())
     .setAuthor({ name: `파티 시작: ${new Date(startedTimestamp * 1_000).toLocaleString("ko-KR")}` });
+
+  if (missionLines.length > 0) {
+    embed.addFields({
+      name: "미션 결과",
+      value: missionLines.join("\n"),
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
+export function buildMissionDetailEmbed(report) {
+  const missions = report.missionReport?.missions ?? [];
+  const embed = new EmbedBuilder()
+    .setColor(0xb7a36a)
+    .setTitle("이번 파티 미션 전체보기")
+    .setDescription(
+      "각 미션은 이번 파티에서 한 사람당 한 번만 보상됩니다.",
+    );
+
+  for (const scope of ["team", "personal"]) {
+    const lines = missions
+      .filter((mission) => mission.scope === scope)
+      .map((mission) => {
+        const winners = mission.completedBy
+          .map((discordUserId) => `<@${discordUserId}>`)
+          .join(" · ");
+        const result = winners ? `완료 · ${winners}` : "미완료";
+        return [
+          `**${mission.name} · ${mission.rewardPoints}P**`,
+          mission.description,
+          result,
+        ].join("\n");
+      });
+
+    if (lines.length > 0) {
+      embed.addFields({
+        name: scope === "team" ? "TEAM" : "PERSONAL",
+        value: lines.join("\n\n"),
+        inline: false,
+      });
+    }
+  }
+
+  return embed;
+}
+
+export function buildRankingDetailEmbed(report) {
+  const players = [...report.players].sort(
+    (left, right) =>
+      (right.missionPoints ?? 0) - (left.missionPoints ?? 0) ||
+      (right.contributionScore ?? 0) - (left.contributionScore ?? 0) ||
+      left.discordUserId.localeCompare(right.discordUserId),
+  );
+  const lines = players.map(
+    (player, index) =>
+      `**${index + 1}위** <@${player.discordUserId}> · ` +
+      `미션 ${player.missionPoints ?? 0}P · ` +
+      `${integerFormatter.format(player.kills)}킬 · ` +
+      `평균딜 ${integerFormatter.format(player.averageDamage)}`,
+  );
+
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle("팀원 순위")
+    .setDescription(lines.join("\n") || "표시할 팀원 기록이 없습니다.")
+    .setFooter({ text: "미션 포인트 우선, 동점이면 ACE 기여도 순입니다." });
 }
 
 function formatRatio(value) {

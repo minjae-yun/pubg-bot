@@ -8,9 +8,18 @@ import {
   statsCommand,
 } from "./commands.js";
 import {
+  handleKillRaceButton,
+  handleKillRaceCommand,
+  KillRaceUserError,
+} from "./kill-race-interactions.js";
+import {
+  buildMissionDetailEmbed,
+  buildPartyActiveEmbed,
   buildPartyButtons,
   buildPartyLobbyEmbed,
   buildPartyReportEmbed,
+  buildPartyReviewButtons,
+  buildRankingDetailEmbed,
 } from "./party-embeds.js";
 import {
   buildPartyReport,
@@ -25,10 +34,22 @@ import { PubgApiError } from "./pubg-api.js";
 import { extractRecentPlayerMatch } from "./recent-stats.js";
 import { buildRecentStatsEmbed } from "./recent-stats-embed.js";
 import { buildStatsEmbed } from "./stats-embed.js";
+import {
+  buildMissionReport,
+  evaluatePartyMissions,
+  selectPartyMissions,
+} from "./missions.js";
+import { analyzeTrackedKills } from "./squad-kills.js";
 
 const MAX_PARTY_MEMBERS = 10;
 
-export function createInteractionHandler({ pubgApi, repository, allowedChannelId = "" }) {
+export function createInteractionHandler({
+  pubgApi,
+  repository,
+  allowedChannelId = "",
+  dataCollector,
+  killRaceService,
+}) {
   return async function handleInteraction(interaction) {
     try {
       if (interaction.isAutocomplete()) {
@@ -45,15 +66,28 @@ export function createInteractionHandler({ pubgApi, repository, allowedChannelId
           return;
         }
 
-        await handleCommand(interaction, pubgApi, repository);
+        await handleCommand(
+          interaction,
+          pubgApi,
+          repository,
+          dataCollector,
+          killRaceService,
+        );
         return;
       }
 
       if (interaction.isButton() && interaction.customId.startsWith("party:")) {
-        await handlePartyButton(interaction, pubgApi, repository);
+        await handlePartyButton(interaction, pubgApi, repository, dataCollector);
+        return;
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith("killrace:")) {
+        await handleKillRaceButton(interaction, { repository, killRaceService });
       }
     } catch (error) {
-      console.error("상호작용 처리 실패:", error?.message || error);
+      if (!(error instanceof InteractionAlreadyHandledError)) {
+        console.error("상호작용 처리 실패:", error?.message || error);
+      }
 
       if (interaction.isAutocomplete()) {
         await interaction.respond([]).catch(() => {});
@@ -65,7 +99,19 @@ export function createInteractionHandler({ pubgApi, repository, allowedChannelId
   };
 }
 
-async function handleCommand(interaction, pubgApi, repository) {
+async function handleCommand(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+  killRaceService,
+) {
+  if (
+    await handleKillRaceCommand(interaction, { repository, killRaceService })
+  ) {
+    return;
+  }
+
   switch (interaction.commandName) {
     case statsCommand.name:
       await handleStats(interaction, pubgApi, repository);
@@ -80,7 +126,12 @@ async function handleCommand(interaction, pubgApi, repository) {
       await handlePartyStart(interaction, repository);
       break;
     case partySummaryCommand.name:
-      await handlePartySummaryCommand(interaction, pubgApi, repository);
+      await handlePartySummaryCommand(
+        interaction,
+        pubgApi,
+        repository,
+        dataCollector,
+      );
       break;
     case partyCancelCommand.name:
       await handlePartyCancelCommand(interaction, repository);
@@ -185,18 +236,25 @@ async function handleRegister(interaction, pubgApi, repository) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const requestedName = interaction.options.getString("닉네임", true);
+  const displayName =
+    interaction.options.getString("이름")?.trim() || undefined;
   const player = await pubgApi.getPlayerByName(requestedName);
-  repository.upsertPlayer({
+  const registeredPlayer = repository.upsertPlayer({
     guildId: interaction.guildId,
     discordUserId: interaction.user.id,
     accountId: player.accountId,
     playerName: player.playerName,
+    displayName,
     platform: pubgApi.platform,
   });
 
-  await interaction.editReply(
+  const lines = [
     `✅ <@${interaction.user.id}> 계정에 PUBG 닉네임 **${player.playerName}**을(를) 연결했습니다.`,
-  );
+  ];
+  if (registeredPlayer.displayName) {
+    lines.push(`킬내기 표시 이름: **${registeredPlayer.displayName}**`);
+  }
+  await interaction.editReply(lines.join("\n"));
 }
 
 async function handlePartyStart(interaction, repository) {
@@ -228,13 +286,18 @@ async function handlePartyStart(interaction, repository) {
   const members = repository.getPartyMembers(session.id);
   await interaction.reply({
     embeds: [buildPartyLobbyEmbed(session, members)],
-    components: [buildPartyButtons(session.id)],
+    components: [buildPartyButtons(session.id, session.status)],
   });
 }
 
-async function handlePartySummaryCommand(interaction, pubgApi, repository) {
+async function handlePartySummaryCommand(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
   assertGuildInteraction(interaction);
-  const session = repository.getActivePartySession(interaction.guildId, interaction.channelId);
+  const session = repository.getOpenPartySession(interaction.guildId, interaction.channelId);
 
   if (!session) {
     await interaction.reply({
@@ -244,14 +307,36 @@ async function handlePartySummaryCommand(interaction, pubgApi, repository) {
     return;
   }
 
+  if (session.status === "recruiting") {
+    await interaction.reply({
+      content: "아직 파티원을 모집 중입니다. 파티장이 **파티 출발**을 눌러주세요.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (session.status !== "active") {
+    await interaction.reply({
+      content: "현재 파티의 결산 초안을 확인 중입니다. 기존 결산 카드에서 **새로고침**하거나 **결산 확정**을 눌러주세요.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   await assertPartyOwner(interaction, session);
   await interaction.deferReply();
-  await finishParty(interaction, session, pubgApi, repository);
+  await publishPartyReview(
+    interaction,
+    session,
+    pubgApi,
+    repository,
+    dataCollector,
+  );
 }
 
 async function handlePartyCancelCommand(interaction, repository) {
   assertGuildInteraction(interaction);
-  const session = repository.getActivePartySession(interaction.guildId, interaction.channelId);
+  const session = repository.getOpenPartySession(interaction.guildId, interaction.channelId);
 
   if (!session) {
     await interaction.reply({
@@ -276,12 +361,17 @@ async function handlePartyCancelCommand(interaction, repository) {
   );
 }
 
-async function handlePartyButton(interaction, pubgApi, repository) {
+async function handlePartyButton(
+  interaction,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
   const [, action, rawSessionId] = interaction.customId.split(":");
   const sessionId = Number(rawSessionId);
   const session = repository.getPartySession(sessionId);
 
-  if (!session || session.status !== "active" || session.guildId !== interaction.guildId) {
+  if (!session || session.status === "completed" || session.guildId !== interaction.guildId) {
     await interaction.reply({
       content: "이미 종료됐거나 존재하지 않는 파티입니다.",
       flags: MessageFlags.Ephemeral,
@@ -290,14 +380,151 @@ async function handlePartyButton(interaction, pubgApi, repository) {
   }
 
   if (action === "join") {
+    if (session.status !== "recruiting") {
+      await interaction.reply({
+        content: "이미 출발한 파티에는 추가로 참가할 수 없습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await handlePartyJoin(interaction, session, repository);
     return;
   }
 
+  if (action === "start") {
+    if (session.status !== "recruiting") {
+      await interaction.reply({
+        content: "이미 출발했거나 결산 중인 파티입니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await assertPartyOwner(interaction, session, "출발");
+    const recentlySelectedMissionKeys = repository.getRecentPartyMissionKeys(
+      session.guildId,
+      session.id,
+      2,
+    );
+    const selectedMissions = selectPartyMissions({
+      excludedKeys: recentlySelectedMissionKeys,
+    });
+    const startedSession = repository.startPartySession(session.id, selectedMissions);
+
+    if (!startedSession) {
+      await interaction.reply({
+        content: "이미 다른 요청에서 파티가 출발했습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const members = repository.getPartyMembers(session.id);
+    const missions = repository.getPartyMissions(session.id);
+    await interaction.update({
+      embeds: [buildPartyActiveEmbed(startedSession, members, missions)],
+      components: [buildPartyButtons(session.id, startedSession.status)],
+    });
+    return;
+  }
+
   if (action === "summary") {
+    if (session.status !== "active") {
+      await interaction.reply({
+        content: "파티가 출발한 뒤에 결산할 수 있습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await assertPartyOwner(interaction, session);
-    await interaction.deferReply();
-    await finishParty(interaction, session, pubgApi, repository);
+    await interaction.deferUpdate();
+    await publishPartyReview(
+      interaction,
+      session,
+      pubgApi,
+      repository,
+      dataCollector,
+    );
+    return;
+  }
+
+  if (action === "refresh") {
+    if (session.status !== "reviewing") {
+      await interaction.reply({
+        content: "결산 초안을 만든 뒤에 새로고침할 수 있습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await assertPartyOwner(interaction, session, "새로고침");
+    await interaction.deferUpdate();
+    await publishPartyReview(
+      interaction,
+      session,
+      pubgApi,
+      repository,
+      dataCollector,
+    );
+    return;
+  }
+
+  if (action === "missions" || action === "ranking") {
+    if (session.status !== "reviewing") {
+      await interaction.reply({
+        content: "결산 초안을 만든 뒤에 상세 결과를 볼 수 있습니다.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const snapshot = repository.getPartyReviewSnapshot(session.id);
+    if (!snapshot?.report) {
+      throw new UserInputError("저장된 결산 초안을 찾지 못했습니다. 새로고침해 주세요.");
+    }
+
+    await interaction.reply({
+      embeds: [
+        action === "missions"
+          ? buildMissionDetailEmbed(snapshot.report)
+          : buildRankingDetailEmbed(snapshot.report),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (action === "confirm") {
+    if (session.status !== "reviewing") {
+      await interaction.reply({
+        content: "먼저 결산 초안을 만들어 주세요.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await assertPartyOwner(interaction, session, "확정");
+    const snapshot = repository.getPartyReviewSnapshot(session.id);
+    if (!snapshot?.report) {
+      throw new UserInputError("저장된 결산 초안을 찾지 못했습니다. 새로고침해 주세요.");
+    }
+
+    if (!repository.confirmPartySession(session.id)) {
+      throw new UserInputError("이미 확정되거나 종료된 파티입니다.");
+    }
+
+    await interaction.update({
+      content: null,
+      embeds: [
+        buildPartyReportEmbed(snapshot.report, {
+          ...session,
+          status: "completed",
+        }),
+      ],
+      components: [],
+    });
     return;
   }
 
@@ -349,21 +576,31 @@ async function handlePartyJoin(interaction, session, repository) {
     return;
   }
 
-  repository.addPartyMember(session.id, interaction.user.id);
+  if (!repository.addPartyMember(session.id, interaction.user.id)) {
+    const latestSession = repository.getPartySession(session.id);
+    await interaction.reply({
+      content:
+        latestSession?.status === "recruiting"
+          ? "이미 이 파티에 참가하고 있습니다."
+          : "파티가 출발하여 참가자 모집이 마감됐습니다.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const members = repository.getPartyMembers(session.id);
   await interaction.update({
     embeds: [buildPartyLobbyEmbed(session, members)],
-    components: [buildPartyButtons(session.id)],
+    components: [buildPartyButtons(session.id, session.status)],
   });
 }
 
-async function finishParty(interaction, session, pubgApi, repository) {
+async function collectPartyReview(session, pubgApi, repository, dataCollector) {
   const members = repository.getPartyMembers(session.id);
   const registeredMembers = members.filter((member) => member.accountId);
 
   if (registeredMembers.length === 0) {
-    await interaction.editReply("등록된 PUBG 플레이어가 없어 결산할 수 없습니다.");
-    return;
+    throw new UserInputError("등록된 PUBG 플레이어가 없어 결산할 수 없습니다.");
   }
 
   const players = await pubgApi.getPlayersByAccountIds(
@@ -386,30 +623,123 @@ async function finishParty(interaction, session, pubgApi, repository) {
     );
 
   if (selectedMatches.length === 0) {
-    await interaction.editReply(
+    throw new UserInputError(
       "파티 시작 이후 함께 플레이한 경기를 아직 찾지 못했습니다. 전적 반영을 기다린 뒤 다시 결산해 주세요.",
     );
-    return;
   }
 
   const accountIds = registeredMembers.map((member) => member.accountId);
   const telemetries = await pubgApi.getTelemetries(
     selectedMatches.map(({ rawMatch }) => rawMatch),
   );
+
+  if (dataCollector) {
+    await dataCollector.collectPartyMatches({
+      sessionId: session.id,
+      rawMatches: selectedMatches.map(({ rawMatch }) => rawMatch),
+      telemetries,
+      partyMembers: registeredMembers,
+      platform: pubgApi.platform,
+    });
+  }
+
   const partyMatches = selectedMatches.map(({ partyMatch }, index) => {
     const friendlyKnocks = countFriendlyKnocks(telemetries[index], accountIds);
+    const killAnalysis = analyzeTrackedKills(telemetries[index], accountIds);
+    const hasTelemetry = (telemetries[index]?.length ?? 0) > 0;
 
     return {
       ...partyMatch,
-      players: partyMatch.players.map((player) => ({
-        ...player,
-        friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
-      })),
+      players: partyMatch.players.map((player) => {
+        const telemetry = killAnalysis.playerTelemetry.get(player.accountId);
+        const humanKillEvents =
+          killAnalysis.killsByPlayer.get(player.accountId) ?? [];
+        return {
+          ...player,
+          kills: hasTelemetry ? humanKillEvents.length : player.kills,
+          damage: hasTelemetry
+            ? (killAnalysis.humanDamageByPlayer.get(player.accountId) ?? 0)
+            : player.damage,
+          friendlyKnocks: friendlyKnocks.get(player.accountId) ?? 0,
+          squadBreakerCount:
+            killAnalysis.sameSquadKills.get(player.accountId)?.count ?? 0,
+          killEvents: humanKillEvents,
+          firstFirearmKey: telemetry?.firstFirearmKey,
+          carePackageWeaponKeys: [
+            ...(telemetry?.carePackageWeaponKeys ?? []),
+          ],
+          flareGunUses: telemetry?.flareGunUses ?? 0,
+        };
+      }),
     };
   });
   const report = buildPartyReport(partyMatches, registeredMembers);
-  repository.completePartySession(session.id);
-  await interaction.editReply({ embeds: [buildPartyReportEmbed(report, session)] });
+  const selectedMissions = repository.getPartyMissions(session.id);
+  const completionCandidates = evaluatePartyMissions(
+    selectedMissions,
+    partyMatches,
+  );
+  repository.recordMissionCompletions(session.id, completionCandidates);
+  const missionReport = buildMissionReport(
+    selectedMissions,
+    repository.getMissionCompletions(session.id),
+    registeredMembers,
+  );
+  const missionPointsByUser = new Map(
+    missionReport.ranking.map((player) => [player.discordUserId, player.points]),
+  );
+  for (const player of report.players) {
+    player.missionPoints = missionPointsByUser.get(player.discordUserId) ?? 0;
+  }
+  report.missionReport = missionReport;
+  report.awards.missionLeaders = missionReport.leaders;
+
+  return {
+    report,
+    syncedMatchCount: partyMatches.length,
+    lastSyncedMatchAt: partyMatches.at(-1)?.createdAt ?? null,
+  };
+}
+
+async function publishPartyReview(
+  interaction,
+  session,
+  pubgApi,
+  repository,
+  dataCollector,
+) {
+  const review = await collectPartyReview(
+    session,
+    pubgApi,
+    repository,
+    dataCollector,
+  );
+  const generatedAt = new Date().toISOString();
+  const snapshot = {
+    version: 1,
+    generatedAt,
+    report: review.report,
+  };
+  const reviewingSession = repository.savePartyReview(session.id, {
+    snapshot,
+    syncedMatchCount: review.syncedMatchCount,
+    lastSyncedMatchAt: review.lastSyncedMatchAt,
+  });
+
+  if (!reviewingSession) {
+    throw new UserInputError("이미 확정되거나 종료된 파티입니다.");
+  }
+
+  await interaction.editReply({
+    content: null,
+    embeds: [
+      buildPartyReportEmbed(review.report, reviewingSession, {
+        reviewing: true,
+        refreshedAt: generatedAt,
+      }),
+    ],
+    components: [buildPartyReviewButtons(session.id)],
+  });
 }
 
 async function assertPartyOwner(interaction, session, action = "결산") {
@@ -496,7 +826,11 @@ async function respondWithError(interaction, error) {
 
   const content = userFacingError(error);
 
-  if (interaction.deferred) {
+  if (interaction.isButton() && interaction.deferred) {
+    await interaction
+      .followUp({ content, flags: MessageFlags.Ephemeral })
+      .catch(() => {});
+  } else if (interaction.deferred) {
     await interaction.editReply({ content, embeds: [], components: [] }).catch(() => {});
   } else if (interaction.replied) {
     await interaction.followUp({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
@@ -506,7 +840,7 @@ async function respondWithError(interaction, error) {
 }
 
 function userFacingError(error) {
-  if (error instanceof UserInputError) {
+  if (error instanceof UserInputError || error instanceof KillRaceUserError) {
     return error.message;
   }
 

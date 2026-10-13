@@ -47,12 +47,10 @@ export function extractPartyMatch(match, members, startedAt, endedAt = new Date(
         assists: safeNumber(stats.assists),
         revives: safeNumber(stats.revives),
         headshotKills: safeNumber(stats.headshotKills),
+        longestKill: safeNumber(stats.longestKill),
         friendlyKills: safeNumber(stats.teamKills),
         friendlyKnocks: 0,
-        deaths:
-          stats.deathType === "alive" || safeNumber(stats.winPlace) === 1
-            ? 0
-            : 1,
+        deaths: stats.deathType === "alive" ? 0 : 1,
         placement: safeNumber(stats.winPlace),
         survivalSeconds: safeNumber(stats.timeSurvived),
       };
@@ -90,6 +88,8 @@ export function buildPartyReport(matches, members) {
         deaths: 0,
         survivalSeconds: 0,
         wins: 0,
+        squadBreakerCount: 0,
+        squadBreakerMatchId: null,
       },
     ]),
   );
@@ -119,6 +119,10 @@ export function buildPartyReport(matches, members) {
       report.deaths += player.deaths;
       report.survivalSeconds += player.survivalSeconds;
       report.wins += player.placement === 1 ? 1 : 0;
+      if (safeNumber(player.squadBreakerCount) > report.squadBreakerCount) {
+        report.squadBreakerCount = safeNumber(player.squadBreakerCount);
+        report.squadBreakerMatchId = match.matchId ?? null;
+      }
       totalKills += player.kills;
       teamDamage += player.damage;
     }
@@ -136,8 +140,7 @@ export function buildPartyReport(matches, members) {
       const contributionScore =
         averageDamage +
         averageKills * 100 +
-        averageAssists * 50 +
-        averageRevives * 50;
+        averageAssists * 50;
 
       return {
         ...player,
@@ -160,9 +163,11 @@ export function buildPartyReport(matches, members) {
       averageContribution > 0 ? player.contributionScore / averageContribution : 0;
   }
   const trolls = pickTrolls(players);
-  const trollIds = new Set(trolls.map((player) => player.discordUserId));
-  const positiveAwardPlayers = players.filter(
-    (player) => !trollIds.has(player.discordUserId),
+  const trollUserIds = new Set(
+    trolls.map((player) => player.discordUserId),
+  );
+  const aceCandidates = players.filter(
+    (player) => !trollUserIds.has(player.discordUserId),
   );
 
   return {
@@ -172,9 +177,8 @@ export function buildPartyReport(matches, members) {
     bestPlacement: Number.isFinite(bestPlacement) ? bestPlacement : 0,
     players,
     awards: {
-      mvp: pickHighest(positiveAwardPlayers, "kda", ["averageDamage", "kills"]),
-      killKing: pickHighest(positiveAwardPlayers, "kills", ["averageDamage", "kda"]),
-      damageKing: pickHighest(positiveAwardPlayers, "averageDamage", ["kills", "kda"]),
+      ace: pickHighest(aceCandidates, "contributionScore", ["averageDamage", "kills"]),
+      squadBreaker: pickSquadBreakers(players),
       trolls,
     },
   };
@@ -219,6 +223,21 @@ function safeNumberForComparison(value) {
   return safeNumber(value);
 }
 
+function pickSquadBreakers(players) {
+  const highestCount = players.reduce(
+    (highest, player) => Math.max(highest, safeNumber(player.squadBreakerCount)),
+    0,
+  );
+
+  if (highestCount < 2) {
+    return [];
+  }
+
+  return players.filter(
+    (player) => safeNumber(player.squadBreakerCount) === highestCount,
+  );
+}
+
 function pickTrolls(players) {
   const selected = new Map();
 
@@ -240,28 +259,6 @@ function pickTrolls(players) {
     if (reasons.length > 0) {
       selected.set(player.discordUserId, { ...player, trollReasons: reasons });
     }
-  }
-
-  if (selected.size === 0 && players.length > 0) {
-    const lowest = players.reduce((loser, player) => {
-      if (
-        !loser ||
-        comparePlayers(player, loser, [
-          "contributionScore",
-          "averageDamage",
-          "kills",
-        ]) < 0
-      ) {
-        return player;
-      }
-
-      return loser;
-    }, null);
-
-    selected.set(lowest.discordUserId, {
-      ...lowest,
-      trollReasons: [`팀 내 최저 ${lowest.contributionRatio.toFixed(2)}인분`],
-    });
   }
 
   return [...selected.values()];

@@ -67,7 +67,7 @@ export const recentStatsCommand = new SlashCommandBuilder()
 
 export const registerPlayerCommand = new SlashCommandBuilder()
   .setName("등록")
-  .setDescription("내 디스코드 계정에 PUBG 닉네임을 연결합니다.")
+  .setDescription("PUBG 닉네임과 킬내기 표시 이름을 연결합니다.")
   .addStringOption((option) =>
     option
       .setName("닉네임")
@@ -75,6 +75,14 @@ export const registerPlayerCommand = new SlashCommandBuilder()
       .setRequired(true)
       .setMinLength(1)
       .setMaxLength(30),
+  )
+  .addStringOption((option) =>
+    option
+      .setName("이름")
+      .setDescription("킬내기 시트에 표시할 이름(예: 민재)")
+      .setRequired(false)
+      .setMinLength(1)
+      .setMaxLength(20),
   );
 
 export const partyStartCommand = new SlashCommandBuilder()
@@ -89,6 +97,60 @@ export const partyCancelCommand = new SlashCommandBuilder()
   .setName("파티취소")
   .setDescription("경기 기록 없이 현재 파티를 종료합니다.");
 
+export const killRaceStartCommand = new SlashCommandBuilder()
+  .setName("킬내기시작")
+  .setDescription("일반 파티와 별개로 PUBG 킬내기를 준비합니다.")
+  .addStringOption((option) =>
+    option
+      .setName("모드")
+      .setDescription("팀 구성")
+      .setRequired(true)
+      .addChoices(
+        { name: "2대2", value: "2v2" },
+        { name: "3대3", value: "3v3" },
+        { name: "4대4", value: "4v4" },
+        { name: "2대2대2", value: "2v2v2" },
+      ),
+  )
+  .addStringOption((option) =>
+    option
+      .setName("진행방식")
+      .setDescription("목표점수 또는 시간제한(기본값: 목표점수)")
+      .setRequired(false)
+      .addChoices(
+        { name: "목표점수", value: "score" },
+        { name: "시간제한", value: "timed" },
+      ),
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName("목표점수")
+      .setDescription("승리 목표 점수(기본값: 30점)")
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(200),
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName("제한시간")
+      .setDescription("시간제한 모드의 진행 시간(시간, 기본값: 3시간)")
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(24),
+  );
+
+export const killRaceStatusCommand = new SlashCommandBuilder()
+  .setName("킬내기현황")
+  .setDescription("현재 채널의 킬내기 점수를 확인합니다.");
+
+export const killRaceHistoryCommand = new SlashCommandBuilder()
+  .setName("킬내기전적")
+  .setDescription("이 서버에서 완료된 킬내기의 전체 누적 전적을 확인합니다.");
+
+export const killRaceEndCommand = new SlashCommandBuilder()
+  .setName("킬내기종료")
+  .setDescription("현재 채널의 킬내기를 종료합니다.");
+
 export const commands = [
   statsCommand,
   recentStatsCommand,
@@ -96,4 +158,8 @@ export const commands = [
   partyStartCommand,
   partySummaryCommand,
   partyCancelCommand,
+  killRaceStartCommand,
+  killRaceStatusCommand,
+  killRaceHistoryCommand,
+  killRaceEndCommand,
 ];
