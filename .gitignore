@@ -9,3 +9,5 @@ npm-debug.log*
 logs/
 bot.stdout.log
 bot.stderr.log
+web/data/
+web/public/uploads/

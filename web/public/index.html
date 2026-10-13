@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="DROPLOG — 디스코드 봇에 등록된 스쿼드의 PUBG 전적">
-  <title>DROPLOG</title>
+  <title>DROPLOG · 디자인 시안 v2</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
   <style>
     /* Discord-style tokens (DESIGN.md) */
@@ -27,7 +27,7 @@
       --max: 1200px;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: auto; }
+    html { scroll-behavior: auto; overflow-x: clip; }
     body {
       margin: 0; min-width: 320px; overflow-x: hidden;
       background: var(--canvas); color: var(--ink);
@@ -233,8 +233,6 @@
     .btn-primary:disabled { opacity: .35; cursor: default; }
     .btn-ghost { background: var(--indigo); }
 
-    .api-error { position: sticky; top: 68px; z-index: 25; margin: 0; padding: 14px 24px; background: var(--magenta); color: #fff; font-weight: 600; text-align: center; }
-    .api-error[hidden] { display: none; }
     /* Back to top + footer */
     .to-top { position: fixed; right: 24px; bottom: 24px; z-index: 30; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--primary); font-size: 22px; font-weight: 900; cursor: pointer; box-shadow: 0 8px 30px rgba(88,101,242,.5); opacity: 0; transform: translateY(20px) scale(.8); pointer-events: none; transition: opacity .3s, transform .3s; }
     .to-top.is-visible { opacity: 1; transform: none; pointer-events: auto; }
@@ -276,158 +274,287 @@
       *, *::before, *::after { animation: none !important; transition: none !important; }
       .car-track { scroll-behavior: auto; }
     }
+
+    /* ===== v2 additions ===== */
+    :root {
+      --series-1: #6f79f2;  /* 대원 (검증된 팔레트) */
+      --series-2: #d64aa6;  /* 스쿼드 평균 */
+      --series-3: #1f9e5f;
+      --amber: #f5b03b;
+      --gold: #f7c948; --silver: #c9cfe8; --bronze: #d98a5a;
+    }
+    a { color: inherit; text-decoration: none; }
+    .nav-links { overflow-x: auto; scrollbar-width: none; }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-link { white-space: nowrap; display: inline-flex; align-items: center; }
+    .nav-link[aria-current="page"] { color: var(--ink); background: var(--primary); }
+    .mock-flag { position: fixed; left: 16px; bottom: 16px; z-index: 35; padding: 8px 14px; border-radius: var(--r-pill); background: rgba(0,0,0,.55); backdrop-filter: blur(8px); font-size: 12px; font-weight: 600; color: var(--muted); }
+
+    /* 맵 아트 (공식 이미지 대신 생성형 지형 일러스트) */
+    .art { position: relative; overflow: hidden; aspect-ratio: 16 / 9; background: #10163f; }
+    .art svg, .art img, .art video { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; }
+    .art .art-label { position: absolute; left: 20px; bottom: 14px; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.85); text-shadow: 0 1px 8px rgba(0,0,0,.5); }
+    .art .art-chip { position: absolute; top: 16px; left: 16px; padding: 4px 12px; border-radius: var(--r-lg); background: rgba(0,0,0,.45); backdrop-filter: blur(6px); font-size: 12px; font-weight: 600; }
+    .art .art-rank { position: absolute; right: 18px; bottom: 6px; font-size: clamp(56px, 7vw, 84px); font-weight: 900; letter-spacing: -0.05em; line-height: 1; color: #fff; text-shadow: 0 6px 30px rgba(0,0,0,.45); }
+    .art.has-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.55)); }
+
+    .match-card.with-art { padding: 0; min-height: 0; }
+    .match-card.with-art .art { border-radius: var(--r-xl) var(--r-xl) 0 0; }
+    .match-card.with-art .body { padding: 22px 26px 26px; }
+    .match-card.with-art h3 { margin-top: 0; }
+    .match-card.with-art .badge { top: 16px; right: 16px; z-index: 2; }
+    .photo-hint { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 4px 10px; border-radius: var(--r-xs); background: rgba(0,0,0,.25); font-size: 13px; font-weight: 600; color: #fff; }
+
+    /* 이달의 MVP 배너 */
+    .mvp-banner { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 28px; padding: 32px 40px; border-radius: var(--r-xl); background: linear-gradient(120deg, #2a1f63 0%, var(--primary) 55%, var(--magenta) 120%); position: relative; overflow: hidden; }
+    .mvp-banner::before { content: "MVP"; position: absolute; right: -10px; bottom: -40px; font-size: 200px; font-weight: 900; letter-spacing: -0.06em; color: rgba(255,255,255,.07); }
+    .crown { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: #3b2a00; font-size: 34px; font-weight: 900; box-shadow: 0 0 0 6px rgba(247,201,72,.25); }
+    .mvp-banner h3 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 44px); font-weight: 900; letter-spacing: -0.02em; }
+    .mvp-banner p { margin: 6px 0 0; color: rgba(255,255,255,.8); }
+    .btn-white { display: inline-flex; align-items: center; height: 48px; padding: 0 22px; border: 0; border-radius: var(--r-lg); background: #fff; color: #000; font-weight: 700; cursor: pointer; }
+
+    /* 하이라이트 스트립 / 패치 요약 (홈) */
+    .two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+    .two-col > *, .duo > *, .patch-layout > * { min-width: 0; }
+    .feature-grid.eq { grid-template-columns: repeat(3, 1fr); }
+    .panel { padding: 32px; border-radius: var(--r-xl); background: var(--indigo); }
+    .panel h3 { margin: 0; font-size: 22px; font-weight: 800; }
+    .panel .sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 20px; }
+    .more-link { flex: none; font-size: 14px; font-weight: 600; color: var(--link); }
+
+    /* 칩/태그 */
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--r-xs); font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .tag.buff { background: rgba(53,237,126,.16); color: var(--green); }
+    .tag.nerf { background: rgba(236,72,189,.18); color: #ff8ad6; }
+    .tag.change { background: rgba(88,101,242,.25); color: #b9bfff; }
+    .tag.return { background: rgba(245,176,59,.18); color: var(--amber); }
+    .tag.new { background: var(--green); color: #000; }
+
+    /* 차트 */
+    .chart-card { padding: 32px; border-radius: var(--r-xl); background: var(--indigo); }
+    .chart-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 8px; }
+    .chart-top h3 { margin: 0; font-size: 22px; font-weight: 800; }
+    .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0 4px; font-size: 14px; color: var(--muted); }
+    .legend span { display: inline-flex; align-items: center; gap: 8px; }
+    .legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+    .legend i.dash { background: repeating-linear-gradient(90deg, var(--series-2) 0 5px, transparent 5px 8px) !important; }
+    .chart { position: relative; margin-top: 8px; }
+    .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .chart .grid line { stroke: rgba(255,255,255,.08); }
+    .chart .axis text { fill: var(--faint); font-size: 12px; font-family: var(--font); }
+    .chart .end-label { font-size: 13px; font-weight: 700; font-family: var(--font); fill: var(--ink); }
+    .chart .hit { fill: transparent; cursor: crosshair; }
+    .tip { position: absolute; z-index: 5; pointer-events: none; min-width: 150px; padding: 12px 14px; border-radius: var(--r-sm); background: #0b0e2e; box-shadow: 0 8px 30px rgba(0,0,0,.45); font-size: 13px; opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+    .tip.on { opacity: 1; transform: none; }
+    .tip b { display: block; margin-bottom: 6px; color: var(--muted); font-weight: 600; }
+    .tip div { display: flex; justify-content: space-between; gap: 14px; }
+    .tip div span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+    .tip div span i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .tip div strong { color: var(--ink); }
+    .chart-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
+    .chart-note strong { color: var(--ink); }
+
+    /* 대원 화면 추가 카드 */
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .weapon-mini { display: grid; gap: 14px; }
+    .wm-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 14px; }
+    .wm-rank { font-weight: 900; color: var(--faint); }
+    .wm-name { font-weight: 700; }
+    .wm-name small { display: block; font-weight: 500; font-size: 12px; color: var(--faint); }
+    .wm-row .bar { grid-column: 2 / 4; height: 8px; margin-top: -6px; }
+    .wm-row strong { font-size: 18px; font-weight: 800; }
+    .tk-big { font-size: clamp(48px, 6vw, 64px); font-weight: 900; line-height: 1; letter-spacing: -0.03em; }
+    .tk-sub { margin: 8px 0 0; color: var(--muted); }
+    .tk-list { margin: 20px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .tk-list li { display: flex; justify-content: space-between; padding: 10px 14px; border-radius: var(--r-sm); background: rgba(255,255,255,.05); font-size: 14px; }
+
+    /* 랭킹 */
+    .podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; align-items: end; gap: 16px; }
+    .pod { padding: 28px 24px; border-radius: var(--r-xl); background: var(--indigo); text-align: center; position: relative; }
+    .pod.first { padding-top: 44px; background: linear-gradient(180deg, var(--primary), #3b2fa8); }
+    .pod .medal { width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; display: grid; place-items: center; font-size: 22px; font-weight: 900; color: #1b1b1b; }
+    .pod.first .medal { width: 72px; height: 72px; font-size: 28px; }
+    .pod h3 { margin: 16px 0 0; font-size: 22px; font-weight: 800; overflow-wrap: anywhere; }
+    .pod .pts { margin-top: 6px; font-size: 34px; font-weight: 900; letter-spacing: -0.02em; }
+    .pod .pts small { font-size: 15px; font-weight: 600; color: rgba(255,255,255,.7); }
+    .pod .meta { margin-top: 4px; font-size: 13px; color: rgba(255,255,255,.7); }
+    .lb { display: grid; gap: 10px; margin-top: 16px; }
+    .lb-row { display: grid; grid-template-columns: 48px 1fr 140px 90px; align-items: center; gap: 16px; padding: 14px 20px; border-radius: var(--r-md); background: var(--indigo); }
+    .lb-row .r { font-size: 18px; font-weight: 900; color: var(--faint); text-align: center; }
+    .lb-row .n { font-weight: 700; }
+    .lb-row .n small { display: block; font-weight: 500; color: var(--faint); font-size: 13px; }
+    .lb-row .p { text-align: right; font-size: 20px; font-weight: 900; }
+    .lb-row .bar { height: 8px; }
+    .lb-row.me { box-shadow: inset 0 0 0 2px var(--primary); }
+    .season-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 28px; border-radius: var(--r-lg); background: rgba(255,255,255,.06); margin-bottom: 24px; }
+    .season-bar strong { font-size: 18px; }
+    .season-bar .count { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--green); }
+    .reward-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .reward { padding: 28px; border-radius: var(--r-xl); background: var(--indigo); }
+    .reward .tier { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; }
+    .reward .tier i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+    .reward ul { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .reward li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 15px; color: var(--muted); }
+    .reward li::before { content: "✦"; color: var(--green); }
+    .reward li strong { color: var(--ink); }
+    .reward.gold { background: linear-gradient(160deg, #3a2f7a, var(--indigo) 60%); box-shadow: inset 0 0 0 2px rgba(247,201,72,.45); }
+    .hof { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+    .hof-item { flex: 0 0 200px; padding: 20px; border-radius: var(--r-lg); background: var(--indigo); }
+    .hof-item .m { font-size: 13px; color: var(--faint); }
+    .hof-item .w { margin-top: 6px; font-size: 20px; font-weight: 800; }
+    .hof-item .s { margin-top: 2px; font-size: 13px; color: var(--muted); }
+    .tk-chart { display: grid; gap: 12px; }
+    .tk-row { display: grid; grid-template-columns: 150px 1fr 130px; align-items: center; gap: 16px; }
+    .tk-row .bar { height: 14px; }
+    .tk-row .bar i { background: var(--series-2) !important; }
+    .tk-row span:last-child { text-align: right; font-size: 14px; color: var(--muted); }
+    .tk-row span:last-child strong { color: var(--ink); font-size: 16px; }
+
+    /* 총기 */
+    .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .filters button { height: 40px; padding: 0 18px; border: 0; border-radius: var(--r-pill); background: var(--indigo); color: var(--muted); font-weight: 600; cursor: pointer; transition: background .2s, color .2s; }
+    .filters button[aria-pressed="true"] { background: var(--ink); color: #000; }
+    .weapon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .weapon { padding: 28px; border-radius: var(--r-xl); background: var(--indigo); display: flex; flex-direction: column; gap: 18px; }
+    .weapon-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+    .weapon-head h3 { margin: 0; font-size: 24px; font-weight: 900; letter-spacing: -0.01em; }
+    .weapon-head p { margin: 2px 0 0; font-size: 13px; color: var(--faint); }
+    .weapon-sil { height: 56px; opacity: .9; }
+    .weapon-sil svg { height: 100%; width: auto; }
+    .king { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); background: rgba(247,201,72,.1); }
+    .king .crown { width: 36px; height: 36px; font-size: 16px; box-shadow: none; }
+    .king strong { display: block; font-size: 17px; }
+    .king span { font-size: 13px; color: var(--muted); }
+    .killers { display: grid; gap: 10px; }
+    .killer { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+    .killer .bar { grid-column: 1 / -1; height: 6px; }
+    .killer em { font-style: normal; font-weight: 800; }
+
+    /* 하이라이트 */
+    .hl-feature { display: grid; grid-template-columns: 1.6fr 1fr; gap: 0; border-radius: var(--r-xl); overflow: hidden; background: var(--black); }
+    .hl-feature .art { aspect-ratio: auto; min-height: 340px; }
+    .hl-feature .info { padding: 36px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+    .hl-feature h3 { margin: 0; font-size: clamp(26px, 3vw, 36px); font-weight: 900; line-height: 1.15; }
+    .play { position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.92); color: #000; font-size: 26px; z-index: 2; box-shadow: 0 10px 40px rgba(0,0,0,.4); transition: transform .2s; }
+    .hl-card:hover .play, .hl-feature:hover .play { transform: scale(1.08); }
+    .dur { position: absolute; right: 12px; bottom: 12px; z-index: 2; padding: 3px 8px; border-radius: var(--r-xs); background: rgba(0,0,0,.7); font-size: 12px; font-weight: 700; }
+    .hl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .hl-card { display: block; border: 0; padding: 0; border-radius: var(--r-xl); overflow: hidden; background: var(--indigo); color: var(--ink); text-decoration: none; text-align: left; cursor: pointer; }
+    .hl-card .play { width: 52px; height: 52px; font-size: 18px; }
+    .hl-card .body { padding: 18px 22px 22px; }
+    .hl-card h4 { margin: 0; font-size: 17px; font-weight: 800; line-height: 1.3; }
+    .hl-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+    .likes { display: inline-flex; align-items: center; gap: 4px; color: #ff8ad6; font-weight: 700; }
+    .btn-green.sm { height: 48px; font-size: 16px; padding: 0 22px; }
+
+    /* 업로드 모달 */
+    .modal-bg { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; padding: 16px; background: rgba(5,7,30,.72); backdrop-filter: blur(6px); }
+    .modal-bg.on { display: grid; animation: fadeIn .2s ease; }
+    @keyframes fadeIn { from { opacity: 0; } }
+    .modal { width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: 32px; border-radius: 28px; background: var(--indigo); box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: pop .3s cubic-bezier(.2,.9,.3,1.2); }
+    @keyframes pop { from { transform: translateY(20px) scale(.97); opacity: 0; } }
+    .modal h3 { margin: 0; font-size: 26px; font-weight: 900; }
+    .modal .sub { margin: 4px 0 20px; color: var(--muted); font-size: 14px; }
+    .drop { display: grid; place-items: center; gap: 6px; padding: 36px 16px; border: 2px dashed rgba(255,255,255,.25); border-radius: var(--r-lg); text-align: center; color: var(--muted); cursor: pointer; transition: border-color .2s, background .2s; }
+    .drop:hover, .drop.drag { border-color: var(--green); background: rgba(53,237,126,.06); }
+    .drop strong { color: var(--ink); font-size: 17px; }
+    .drop .big { font-size: 34px; }
+    .or { display: flex; align-items: center; gap: 12px; margin: 16px 0; font-size: 13px; color: var(--faint); }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .field { display: grid; gap: 6px; margin-top: 14px; }
+    .field label { font-size: 14px; font-weight: 600; color: var(--muted); }
+    .field input, .field select { height: 48px; padding: 0 14px; border: 0; border-radius: var(--r-sm); background: rgba(0,0,0,.28); color: var(--ink); font-size: 16px; outline: 0; }
+    .field input:focus, .field select:focus { box-shadow: 0 0 0 2px var(--primary); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    .btn-ghost-sm { height: 48px; padding: 0 20px; border: 0; border-radius: var(--r-sm); background: rgba(255,255,255,.1); font-weight: 600; cursor: pointer; }
+
+    /* 패치노트 */
+    .patch-layout { display: grid; grid-template-columns: 260px 1fr; gap: 32px; align-items: start; }
+    .timeline { position: sticky; top: 88px; display: grid; gap: 4px; padding-left: 18px; border-left: 2px solid var(--line); }
+    .tl-item { position: relative; display: block; width: 100%; padding: 12px 14px; border: 0; border-radius: var(--r-sm); background: none; text-align: left; cursor: pointer; transition: background .2s; }
+    .tl-item::before { content: ""; position: absolute; left: -26px; top: 18px; width: 12px; height: 12px; border-radius: 50%; background: var(--canvas); box-shadow: 0 0 0 2px var(--faint); }
+    .tl-item[aria-current="true"] { background: var(--indigo); }
+    .tl-item[aria-current="true"]::before { background: var(--green); box-shadow: 0 0 0 2px var(--green), 0 0 0 6px rgba(53,237,126,.2); }
+    .tl-item strong { display: block; font-size: 16px; }
+    .tl-item span { font-size: 13px; color: var(--faint); }
+    .patch-hero { padding: 36px; border-radius: var(--r-xl); background: linear-gradient(135deg, #1e2353, #2c2470 60%, #4a2a7a); }
+    .patch-hero h2 { margin: 10px 0 0; font-size: clamp(30px, 4vw, 44px); font-weight: 900; letter-spacing: -0.02em; }
+    .patch-hero p { margin: 10px 0 0; color: var(--muted); max-width: 640px; }
+    .patch-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .callout { display: grid; grid-template-columns: auto 1fr; gap: 16px; margin-top: 16px; padding: 22px 26px; border-radius: var(--r-lg); background: rgba(53,237,126,.08); box-shadow: inset 4px 0 0 var(--green); }
+    .callout .ic { font-size: 22px; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    .callout p { margin: 0; color: var(--muted); font-size: 15px; }
+    .patch-sec { margin-top: 36px; }
+    .patch-sec h3 { margin: 0 0 16px; font-size: 24px; font-weight: 900; display: flex; align-items: center; gap: 10px; }
+    .chg { display: grid; grid-template-columns: 180px 1fr; gap: 20px; padding: 22px 24px; border-radius: var(--r-lg); background: var(--indigo); margin-bottom: 10px; }
+    .chg-name { font-size: 18px; font-weight: 800; }
+    .chg-name .tag { margin-top: 8px; }
+    .stat-diff { display: grid; gap: 10px; }
+    .diff { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 12px; font-size: 14px; }
+    .diff span:first-child { color: var(--muted); }
+    .diff .vals { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+    .diff .old { color: var(--faint); text-decoration: line-through; }
+    .diff .arrow { color: var(--faint); }
+    .diff .new.up { color: var(--green); font-weight: 800; }
+    .diff .new.down { color: #ff8ad6; font-weight: 800; }
+    .chg p { margin: 0; color: var(--muted); font-size: 15px; }
+    .return-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .return-card { border-radius: var(--r-lg); overflow: hidden; background: var(--indigo); }
+    .return-card .art { aspect-ratio: 16 / 10; }
+    .return-card .b { padding: 16px 18px; }
+    .return-card strong { display: block; }
+    .return-card span { font-size: 13px; color: var(--muted); }
+
+    @media (max-width: 1023px) {
+      .two-col, .duo { grid-template-columns: 1fr; }
+      .feature-grid.eq { grid-template-columns: 1fr 1fr; }
+      .weapon-grid, .hl-grid, .reward-grid { grid-template-columns: repeat(2, 1fr); }
+      .hl-feature { grid-template-columns: 1fr; }
+      .hl-feature .art { min-height: 0; aspect-ratio: 16 / 9; }
+      .patch-layout { grid-template-columns: 1fr; }
+      .timeline { position: static; display: flex; overflow-x: auto; padding: 0 0 8px; border: 0; gap: 8px; }
+      .tl-item { flex: 0 0 auto; width: auto; background: var(--indigo); }
+      .tl-item::before { display: none; }
+      .tl-item[aria-current="true"] { background: var(--primary); }
+      .return-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 767px) {
+      .nav-inner { gap: 10px; }
+      .nav-link { padding: 8px 10px; font-size: 14px; }
+      .mvp-banner { grid-template-columns: 1fr; padding: 28px; gap: 16px; text-align: left; }
+      .podium { grid-template-columns: 1fr; }
+      .pod.first { order: -1; }
+      .lb-row { grid-template-columns: 36px 1fr 70px; padding: 12px 14px; }
+      .lb-row .bar { display: none; }
+      .weapon-grid, .hl-grid, .reward-grid, .return-grid, .feature-grid.eq { grid-template-columns: 1fr; }
+      .tk-row { grid-template-columns: 90px 1fr; }
+      .tk-row span:last-child { grid-column: 1 / -1; text-align: left; margin-top: -6px; }
+      .chg { grid-template-columns: 1fr; gap: 12px; }
+      .chart-card, .panel { padding: 22px; }
+      .mock-flag { display: none; }
+    }
+
   </style>
 </head>
 <body>
   <div class="progress" id="progress" aria-hidden="true"></div>
   <nav class="nav" id="nav" aria-label="주요 화면">
     <div class="nav-inner">
-      <button class="brand" type="button" data-screen-link="search"><span class="brand-dot" aria-hidden="true"></span><span>DROPLOG</span></button>
-      <div class="nav-links">
-        <button class="nav-link" type="button" aria-selected="true" data-screen-link="search">검색</button>
-        <button class="nav-link" type="button" aria-selected="false" data-screen-link="operator">대원</button>
-        <button class="nav-link" type="button" aria-selected="false" data-screen-link="report">경기</button>
+      <a class="brand" href="#/"><span class="brand-dot" aria-hidden="true"></span><span>DROPLOG</span></a>
+      <div class="nav-links" id="nav-links">
+        <a class="nav-link" href="#/" data-nav="home">홈</a>
+        <a class="nav-link" href="#/player/p1" data-nav="player">대원</a>
+        <a class="nav-link" href="#/rank" data-nav="rank">랭킹</a>
+        <a class="nav-link" href="#/weapons" data-nav="weapons">총기</a>
+        <a class="nav-link" href="#/highlights" data-nav="highlights">하이라이트</a>
+        <a class="nav-link" href="#/patch" data-nav="patch">패치노트</a>
       </div>
     </div>
   </nav>
 
-  <div class="api-error" id="api-error" role="alert" hidden></div>
-  <main id="app" aria-live="polite">
-    <!-- ============ 1. 검색 ============ -->
-    <section class="screen is-active" data-screen="search" aria-labelledby="search-title">
-      <header class="hero center">
-        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="wrap parallax">
-          <p class="eyebrow" data-reveal>디스코드 봇 등록 대원 전용</p>
-          <h1 class="display-xl" id="search-title" data-reveal>Drop.<br>Fight.<br>Chicken.</h1>
-          <p class="lead" data-reveal>우리 스쿼드의 모든 낙하 기록을 한곳에서 확인하세요.</p>
-          <form class="search" id="search-form" novalidate data-reveal>
-            <label class="sr-only" for="player-search">대원 닉네임</label>
-            <div class="search-field">
-              <input class="search-input" id="player-search" type="search" placeholder="닉네임 또는 PUBG 아이디" autocomplete="off">
-              <button class="btn-green" type="submit">전적 검색</button>
-            </div>
-            <p class="search-help">등록된 대원만 검색할 수 있어요 · 기록 수집 이후 경기만 표시돼요</p>
-          </form>
-          <div class="notice" id="unregistered-state" role="alert">
-            <strong>등록되지 않은 대원이에요</strong>
-            <p><span id="unregistered-query"></span>은(는) 봇에 등록되어 있지 않아요. 디스코드에서 PUBG 계정을 먼저 등록해 주세요.</p>
-          </div>
-          <div class="chips" id="member-chips" aria-label="등록 대원" data-reveal></div>
-        </div>
-      </header>
-
-      <div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
-
-      <section class="section">
-        <div class="wrap">
-          <div class="stats" id="facts"></div>
-        </div>
-      </section>
-
-      <section class="section-sm">
-        <div class="wrap">
-          <div class="head">
-            <div data-reveal>
-              <h2 class="display-md">스쿼드 대원</h2>
-              <p>옆으로 넘겨서 대원을 골라보세요</p>
-            </div>
-            <div class="car-controls" data-reveal>
-              <button class="car-btn" type="button" data-car-prev="members" aria-label="이전 대원">‹</button>
-              <button class="car-btn" type="button" data-car-next="members" aria-label="다음 대원">›</button>
-            </div>
-          </div>
-          <div class="carousel" data-carousel="members">
-            <div class="car-track" id="member-track"></div>
-            <div class="dots" data-car-dots="members"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="wrap">
-          <div class="head" data-reveal>
-            <div>
-              <h2 class="display-md">최근 경기</h2>
-              <p>가장 최근에 수집된 3경기</p>
-            </div>
-          </div>
-          <div class="feature-grid" id="recent-operations"></div>
-        </div>
-      </section>
-    </section>
-
-    <!-- ============ 2+3. 대원 ============ -->
-    <section class="screen" data-screen="operator" aria-labelledby="operator-name">
-      <header class="hero op-hero center">
-        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="wrap parallax">
-          <button type="button" class="back" data-screen-link="search">‹ 대원 검색</button>
-          <p class="eyebrow" id="operator-id" data-reveal>&nbsp;</p>
-          <h1 class="display-xl" id="operator-name" data-reveal>—</h1>
-          <div class="op-meta" id="operator-range" data-reveal></div>
-        </div>
-      </header>
-
-      <section class="section">
-        <div class="wrap">
-          <div class="head" data-reveal><div><h2 class="display-md">핵심 전적</h2><p>수집된 전체 경기 기준</p></div></div>
-          <div class="stats" id="operator-metrics"></div>
-        </div>
-      </section>
-
-      <section class="section-sm">
-        <div class="wrap">
-          <div class="head" data-reveal>
-            <div><h2 class="display-md">맵별 기록</h2><p>탭을 눌러 맵을 바꿔보세요</p></div>
-            <div class="seg" role="tablist" id="map-tabs"></div>
-          </div>
-          <div class="map-panel" id="map-panel" data-reveal></div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="wrap">
-          <div class="head" data-reveal>
-            <div><h2 class="display-md">경기 목록</h2><p>경기를 누르면 상세 기록이 열려요</p></div>
-            <div class="seg" role="tablist" id="log-filter">
-              <button type="button" role="tab" aria-selected="true" data-filter="all">전체</button>
-              <button type="button" role="tab" aria-selected="false" data-filter="사녹">사녹</button>
-              <button type="button" role="tab" aria-selected="false" data-filter="태이고">태이고</button>
-            </div>
-          </div>
-          <div class="rows" id="operation-log"></div>
-          <nav class="pager" id="pager" aria-label="경기 목록 페이지"></nav>
-          <p class="pager-info" id="pager-info"></p>
-        </div>
-      </section>
-    </section>
-
-    <!-- ============ 4. 경기 상세 ============ -->
-    <section class="screen" data-screen="report" aria-labelledby="report-title">
-      <header class="hero center">
-        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="wrap parallax" id="report-hero">
-          <button type="button" class="back" data-screen-link="operator">‹ 대원 기록</button>
-          <p class="eyebrow" id="report-meta" data-reveal>&nbsp;</p>
-          <p class="rank-giant num" id="report-rank" data-reveal>#-</p>
-          <h1 class="display-md" id="report-title" data-reveal>&nbsp;</h1>
-          <div class="sum" id="report-summary" data-reveal></div>
-        </div>
-      </header>
-
-      <section class="section">
-        <div class="wrap">
-          <div class="head" data-reveal><div><h2 class="display-md">팀원별 기록</h2><p>딜량 비중이 가장 높은 대원이 MVP예요 · 카드를 누르면 그 대원 기록으로 가요</p></div></div>
-          <div class="team" id="team-grid"></div>
-          <div class="match-nav">
-            <button class="btn-primary btn-ghost" type="button" id="prev-match">‹ 이전 경기</button>
-            <button class="btn-primary" type="button" id="next-match">다음 경기 ›</button>
-          </div>
-        </div>
-      </section>
-    </section>
-  </main>
+  <main id="app" aria-live="polite"></main>
 
   <footer class="footer">
     <div class="wrap">
@@ -438,36 +565,522 @@
 
   <button class="to-top" id="to-top" type="button" aria-label="맨 위로">↑</button>
 
+  <div class="modal-bg" id="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+    <form class="modal" id="upload-form">
+      <h3 id="upload-title">하이라이트 박제하기</h3>
+      <p class="sub">내 인생샷을 스쿼드 명예의 전당에 올려보세요</p>
+      <label class="drop" id="drop">
+        <span class="big" aria-hidden="true">🎬</span>
+        <strong>영상 파일을 끌어다 놓거나 눌러서 선택</strong>
+        <span>MP4 · WebM · JPG · PNG · 최대 50MB</span>
+        <input id="f-file" type="file" accept="video/mp4,video/webm,image/jpeg,image/png,image/webp" hidden>
+      </label>
+      <div class="or">또는</div>
+      <div class="field"><label for="f-link">YouTube · 치지직 · 클립 링크</label><input id="f-link" type="url" placeholder="https://"></div>
+      <div class="field"><label for="f-title">제목</label><input id="f-title" type="text" placeholder="예: 사녹 강변 4킬 원맨쇼"></div>
+      <div class="field"><label for="f-desc">설명 (선택)</label><input id="f-desc" type="text" maxlength="500" placeholder="왜 박제할 장면인지 한 줄로"></div>
+      <div class="field"><label for="f-who">주인공</label><select id="f-who"></select></div>
+      <div class="field"><label for="f-match">경기 연결 (선택)</label><select id="f-match"><option>연결 안 함</option><option>10.09 태이고 · #8</option><option>10.08 사녹 · #1 치킨</option></select></div>
+      <div class="field"><label for="f-key">관리자 업로드 키</label><input id="f-key" type="password" autocomplete="current-password" placeholder=".env의 WEB_ADMIN_KEY"></div>
+      <p class="sub" id="upload-status" role="status"></p>
+      <div class="modal-actions">
+        <button class="btn-ghost-sm" type="button" data-close>취소</button>
+        <button class="btn-green sm" type="submit">올리기</button>
+      </div>
+    </form>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
   <script>
-    // 실제 데이터: web/server.js 의 API에서 받아옵니다.
-    const API = location.protocol === "file:" ? "http://127.0.0.1:3000/api" : "/api";
-    const PER_PAGE = 5;
-    const state = { operatorId: null, matchId: null, mapIndex: 0, filter: "all", page: 1 };
-    const data = { summary: null, players: [], recent: [], player: null, log: null, match: null };
+    /* =========================================================
+       DROPLOG v2 — Claude 디자인 위에 실제 SQLite API 연결
+       MOCK 객체는 화면 모델이며 bootstrap()이 실제 값으로 채웁니다.
+       ========================================================= */
+    let MOCK = {
+      players: [], weeks: {}, growth: {}, squadGrowth: {}, weapons: [], matches: [], highlights: [],
+      hof: [], patches: [], summary: { matches: 0 }, season: { label: "", remainingDays: 0 }
+    };
+
+    /* ---------- 공통 유틸 ---------- */
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const hasGsap = typeof gsap !== "undefined" && typeof ScrollTrigger !== "undefined" && !reduceMotion;
     if (hasGsap) { gsap.registerPlugin(ScrollTrigger); document.documentElement.classList.add("motion"); }
-
     const $ = id => document.getElementById(id);
+    const app = $("app");
+    const API = location.protocol === "file:" ? "http://127.0.0.1:3000/api" : "/api";
+    let activePlayerId = null;
+    let currentMatch = null;
+    let uploadConfig = { uploadEnabled: false, maxUploadMb: 50 };
     const fmt = n => Number(n).toLocaleString("ko-KR");
     const esc = v => String(v ?? "").replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '"': "&quot;" })[c]);
     const countAttr = (value, decimals = 0, suffix = "") => `data-count="${value}" data-decimals="${decimals}" data-suffix="${suffix}"`;
-    const mmss = sec => `${Math.floor((sec || 0) / 60)}:${String(Math.round((sec || 0) % 60)).padStart(2, "0")}`;
-    const MODES = { squad: "스쿼드 TPP", "squad-fpp": "스쿼드 FPP", duo: "듀오 TPP", "duo-fpp": "듀오 FPP", solo: "솔로 TPP", "solo-fpp": "솔로 FPP" };
-    const modeLabel = m => MODES[m] ?? (m || "기타");
-    const headline = p => !p ? "기록된 팀원이 없는 경기" : p === 1 ? "치킨 디너!" : p <= 3 ? `TOP 3 · ${p}위` : p <= 10 ? `TOP 10 진입 · ${p}위` : `${p}위로 마무리`;
+    const byName = n => MOCK.players.find(p => p.name === n);
+    const TAGS = { buff: "▲ 버프", nerf: "▼ 너프", change: "● 변경", return: "↺ 복각", new: "NEW" };
 
-    async function api(path) {
-      const res = await fetch(API + path);
-      if (!res.ok) throw Object.assign(new Error((await res.json().catch(() => ({}))).error || res.statusText), { status: res.status });
-      return res.json();
+    async function api(path, options) {
+      const response = await fetch(API + path, options);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `요청 실패 (${response.status})`);
+      return body;
     }
-    function showError(message) {
-      const bar = $("api-error");
-      bar.textContent = message;
-      bar.hidden = false;
+
+    /* ---------- 맵 아트: 공식 이미지 없이 지형 일러스트를 SVG로 생성 ---------- */
+    function rng(seed) { let s = 0; for (const c of String(seed)) s = (s * 31 + c.charCodeAt(0)) >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+    function mapArt(map, seed = map) {
+      const r = rng(seed + map);
+      const sanhok = map === "사녹";
+      const [c1, c2, c3] = sanhok ? ["#0c3a2c", "#17694a", "#3fa56f"] : ["#3a1d0c", "#9a5a1c", "#e2a44a"];
+      const line = sanhok ? "rgba(190,255,215,.16)" : "rgba(255,230,190,.17)";
+      const id = "g" + Math.floor(r() * 1e9);
+      const cx = 200 + r() * 400, cy = 120 + r() * 200;
+      let rings = "";
+      for (let i = 1; i <= 9; i++) {
+        const rx = 40 * i + r() * 14, ry = 26 * i + r() * 10, rot = r() * 40 - 20;
+        rings += `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${rot} ${cx} ${cy})" fill="none" stroke="${line}" stroke-width="${i % 3 === 0 ? 1.6 : .9}"/>`;
+      }
+      const y0 = 60 + r() * 300;
+      const river = sanhok
+        ? `<path d="M-20 ${y0} C 200 ${y0 - 80 + r() * 160}, 420 ${y0 + 120 - r() * 200}, 820 ${y0 - 40 + r() * 120}" stroke="#3aa0c8" stroke-opacity=".55" stroke-width="${16 + r() * 10}" fill="none" stroke-linecap="round"/>`
+        : `<path d="M-20 ${y0} L 820 ${y0 - 120 + r() * 240}" stroke="rgba(30,15,5,.45)" stroke-width="10" fill="none"/><path d="M${200 + r() * 300} -20 L ${260 + r() * 300} 470" stroke="rgba(30,15,5,.35)" stroke-width="6" fill="none"/>`;
+      let blobs = "";
+      for (let i = 0; i < 14; i++) {
+        const x = r() * 800, y = r() * 450, s = 6 + r() * 22;
+        blobs += sanhok ? `<circle cx="${x}" cy="${y}" r="${s}" fill="#0a2f22" fill-opacity="${.25 + r() * .35}"/>` : `<rect x="${x}" y="${y}" width="${s * 3}" height="${s * 1.6}" fill="${r() > .5 ? "#b5742a" : "#6e3d14"}" fill-opacity=".35" transform="rotate(${r() * 30 - 15} ${x} ${y})"/>`;
+      }
+      const zx = 260 + r() * 280, zy = 140 + r() * 170, zr = 70 + r() * 60;
+      return `<svg viewBox="0 0 800 450" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset=".6" stop-color="${c2}"/><stop offset="1" stop-color="${c3}"/></linearGradient></defs>
+        <rect width="800" height="450" fill="url(#${id})"/>${blobs}${rings}${river}
+        <circle cx="${zx}" cy="${zy}" r="${zr}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="2.5" stroke-dasharray="10 8"/>
+        <circle cx="${zx}" cy="${zy}" r="${zr * 2.1}" fill="none" stroke="#5aa0ff" stroke-opacity=".55" stroke-width="3"/>
+      </svg>`;
+    }
+    const art = (map, seed, inner = "", extraClass = "") => `<div class="art ${extraClass}">${mapArt(map, seed)}${inner}</div>`;
+    const mediaArt = (map, seed, inner = "", mediaUrl = "") => mediaUrl
+      ? `<div class="art has-photo"><img src="${esc(mediaUrl)}" alt="${esc(map)} 경기 이미지" loading="lazy">${inner}</div>`
+      : art(map || "사녹", seed, inner);
+
+    /* 총기 실루엣(카테고리별 단순 도형) */
+    const SIL = {
+      AR: "M4 22h70l6-6h40v6h28v8h-30l-6 10h-14l2-10H58l-10 18H34l6-18H4z",
+      DMR: "M2 22h96l4-5h36v5h22v7H136l-6 9h-12l2-9H52l-8 16H32l6-16H2z",
+      SR: "M0 22h120l4-4h22v4h14v6h-16l-4 6H128l2-6H44l-8 14H24l6-14H0z",
+      SMG: "M20 20h60l6-6h20v6h18v8H102l-6 14H82l2-14H60l-6 16H42l6-16H20z",
+      SG: "M6 21h104l6-5h30v5h12v8h-14l-6 8h-12l2-8H48l-8 15H28l6-15H6z"
+    };
+    const sil = cat => `<svg viewBox="0 0 160 52" aria-hidden="true"><path d="${SIL[cat] || SIL.AR}" fill="rgba(255,255,255,.85)"/></svg>`;
+
+    /* ---------- 라우터: 해시 주소로 화면 전환 → 브라우저 뒤로가기 동작 ---------- */
+    const routes = [
+      [/^#?\/?$/, renderHome, "home"],
+      [/^#\/player\/([^/]+)$/, renderPlayer, "player"],
+      [/^#\/match\/([^/]+)$/, renderMatch, "match"],
+      [/^#\/rank(?:\/(\w+))?$/, renderRank, "rank"],
+      [/^#\/weapons$/, renderWeapons, "weapons"],
+      [/^#\/highlights$/, renderHighlights, "highlights"],
+      [/^#\/patch(?:\/(\d+))?$/, renderPatch, "patch"]
+    ];
+    async function router() {
+      const hash = location.hash || "#/";
+      for (const [re, fn, nav] of routes) {
+        const m = hash.match(re);
+        if (!m) continue;
+        document.querySelectorAll("[data-nav]").forEach(a => a.dataset.nav === nav ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+        try {
+          app.innerHTML = await fn(...m.slice(1).map(decodeURIComponent));
+        } catch (error) {
+          app.innerHTML = `<section class="section"><div class="wrap"><div class="empty">데이터를 불러오지 못했어요: ${esc(error.message)}</div></div></section>`;
+        }
+        window.scrollTo(0, 0);
+        afterRender(nav);
+        requestAnimationFrame(() => initMotion(app));
+        return;
+      }
+      location.replace("#/");
+    }
+    window.addEventListener("hashchange", router);
+
+    const afterHooks = {};
+    function afterRender(nav) { afterHooks[nav]?.(); }
+
+    /* ---------- 홈 ---------- */
+    function renderHome() {
+      const mvp = [...MOCK.players].sort((a, b) => b.points - a.points)[0];
+      const latestPatch = MOCK.patches[0];
+      const season = MOCK.season;
+      return `
+      <header class="hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax">
+          <p class="eyebrow" data-reveal>디스코드 봇 등록 대원 전용</p>
+          <h1 class="display-xl" data-reveal>Drop.<br>Fight.<br>Chicken.</h1>
+          <p class="lead" data-reveal>우리 스쿼드의 모든 낙하 기록을 한곳에서 확인하세요.</p>
+          <form class="search" id="search-form" data-reveal>
+            <div class="search-field"><input class="search-input" id="player-search" type="search" placeholder="닉네임 또는 PUBG 아이디" autocomplete="off"><button class="btn-green" type="submit">전적 검색</button></div>
+          </form>
+          <div class="chips" data-reveal>${MOCK.players.map(p => `<a class="chip" style="display:inline-flex;align-items:center" href="#/player/${p.id}">${esc(p.name)}</a>`).join("")}</div>
+        </div>
+      </header>
+      <div class="marquee" aria-hidden="true"><div class="marquee-track">${(() => { const l = ["Sanhok", "Taego", `${MOCK.summary.matches} matches`, "Winner winner", "Chicken dinner"].map(w => `<span>${w} <i>✦</i></span>`).join(""); return l + l; })()}</div></div>
+
+      <section class="section-sm"><div class="wrap">
+        <a class="mvp-banner" href="#/rank" data-reveal>
+          <span class="crown" aria-hidden="true">♛</span>
+          <div><span class="eyebrow" style="margin:0;background:rgba(0,0,0,.25)">${esc(season.label)} · 1위 질주 중</span><h3>${esc(mvp.name)}</h3><p>${fmt(mvp.points)}점 · 미션 ${mvp.missions}개 완료 · 시즌 종료까지 ${season.remainingDays}일</p></div>
+          <span class="btn-white">랭킹 보기 ›</span>
+        </a>
+      </div></section>
+
+      <section class="section-sm"><div class="wrap">
+        <div class="head" data-reveal><div><h2 class="display-md">최근 경기</h2><p>맵 일러스트 위에 경기 스크린샷이 있으면 그 사진이 대신 들어가요</p></div></div>
+        <div class="feature-grid eq">${MOCK.matches.map((m, i) => `
+          <a class="match-card with-art ${i === 1 ? "is-feature" : ""}" href="#/match/${encodeURIComponent(m.id)}">
+            ${mediaArt(m.map, m.id, `<span class="art-chip">${m.map} · ${m.date}</span><span class="art-rank num">#${m.placement ?? "-"}</span>`, m.photoUrl)}
+            ${m.placement === 1 ? '<span class="badge">치킨</span>' : ""}
+            <div class="body"><h3>${m.placement === 1 ? "치킨 디너!" : m.placement <= 10 ? `TOP 10 진입 · ${m.placement}위` : `${m.placement}위로 마무리`}</h3><p>팀 ${m.kills}킬 · ${fmt(m.damage)} 딜량 · ${m.dur}</p>
+            ${m.photoUrl ? '<span class="photo-hint">스크린샷 연결됨</span>' : ""}</div>
+          </a>`).join("")}</div>
+      </div></section>
+
+      <section class="section"><div class="wrap two-col">
+        <div class="panel" data-reveal>
+          <div class="panel-head"><div><h3>새 하이라이트</h3><p class="sub">이번 주 스쿼드가 박제한 장면</p></div><a class="more-link" href="#/highlights">전체 보기 ›</a></div>
+          ${MOCK.highlights.length ? `<div class="carousel" data-carousel="hl"><div class="car-track">${MOCK.highlights.slice(0, 4).map(hlCard).join("")}</div><div class="dots" data-car-dots="hl"></div></div>
+          <div class="car-controls" style="justify-content:flex-end;margin-top:8px"><button class="car-btn" type="button" data-car-prev="hl" aria-label="이전">‹</button><button class="car-btn" type="button" data-car-next="hl" aria-label="다음">›</button></div>
+          ` : '<div class="empty">아직 올라온 하이라이트가 없어요</div>'}
+        </div>
+        <a class="panel" href="#/patch" data-reveal style="display:block">
+          <div class="panel-head"><div><h3>최신 패치</h3><p class="sub">${latestPatch.date} · ${esc(latestPatch.v)}</p></div><span class="more-link">자세히 ›</span></div>
+          <p style="margin:0;font-size:24px;font-weight:900;line-height:1.25">${esc(latestPatch.title)}</p>
+          <div class="patch-tags">${latestPatch.tags.map(t => `<span class="tag ${t}">${TAGS[t]}</span>`).join("")}</div>
+          <div class="callout"><span class="ic">i</span><div><strong>공식 업데이트</strong><p>${esc(latestPatch.impact || "공식 공지에서 세부 변경사항을 확인하세요.")}</p></div></div>
+        </a>
+      </div></section>`;
+    }
+    afterHooks.home = () => {
+      $("search-form").addEventListener("submit", e => {
+        e.preventDefault();
+        const q = $("player-search").value.trim().toLowerCase();
+        const p = MOCK.players.find(x => x.name.toLowerCase().includes(q) || x.pubg.toLowerCase().includes(q));
+        if (q && p) location.hash = `#/player/${p.id}`;
+      });
+      if (MOCK.highlights.length) initCarousel("hl");
+    };
+
+    function hlCard(h) {
+      return `<a class="hl-card" href="${esc(h.mediaUrl || "#/highlights")}" ${h.mediaUrl ? 'target="_blank" rel="noopener"' : ""} data-hl="${h.id}" style="flex:0 0 calc((100% - 16px) / 2);min-width:220px;scroll-snap-align:start">
+        ${mediaArt(h.map || "사녹", h.id, `<span class="play" aria-hidden="true">▶</span><span class="dur">${esc(h.mediaType === "link" ? "LINK" : "FILE")}</span>`, h.mediaType === "image" ? h.mediaUrl : "")}
+        <div class="body"><h4>${esc(h.title)}</h4><div class="hl-meta"><span>${esc(h.who)}</span><span>${h.map} · ${h.date}</span><span class="likes">♥ ${h.likes}</span></div></div>
+      </a>`;
+    }
+
+    /* ---------- 대원 ---------- */
+    let growthMetric = "adr";
+    function renderPlayer(id) {
+      const p = MOCK.players.find(x => x.id === id) || MOCK.players[0];
+      activePlayerId = p.id;
+      const myWeapons = MOCK.weapons.map(w => ({ w, k: (w.top.find(t => t[0] === p.name) || [, 0])[1] })).filter(x => x.k).sort((a, b) => b.k - a.k).slice(0, 4);
+      const maxK = myWeapons[0]?.k || 1;
+      const tkShare = p.kills ? (p.teamKills / (p.kills + p.teamKills) * 100) : 0;
+      return `
+      <header class="hero op-hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax">
+          <a class="back" href="#/">‹ 홈</a>
+          <p class="eyebrow" data-reveal>${esc(p.pubg)}</p>
+          <h1 class="display-xl" data-reveal>${esc(p.name)}</h1>
+          <div class="op-meta" data-reveal><span>${p.games}경기</span><span>미션 ${fmt(p.points)}점</span><span>최장 킬 ${p.longest}m</span></div>
+        </div>
+      </header>
+      <section class="section-sm"><div class="wrap">
+        <div class="stats">
+          <div class="stat blurple"><span class="stat-value num" ${countAttr(p.kd, 2)}>${p.kd}</span><div><span class="stat-label">K/D</span><span class="stat-note">${p.kills}킬 · 헤드샷 ${p.hs}%</span></div></div>
+          <div class="stat magenta"><span class="stat-value num" ${countAttr(p.adr)}>${p.adr}</span><div><span class="stat-label">평균 딜량</span><span class="stat-note">경기당 피해량</span></div></div>
+          <div class="stat"><span class="stat-value num" ${countAttr(p.top10, 1, "%")}>${p.top10}%</span><div><span class="stat-label">TOP 10</span><div class="meter"><span data-width="${p.top10}"></span></div></div></div>
+          <div class="stat"><span class="stat-value num" ${countAttr(p.wins)}>${p.wins}</span><div><span class="stat-label">치킨</span><span class="stat-note">승률 ${(p.wins / p.games * 100).toFixed(1)}%</span></div></div>
+        </div>
+      </div></section>
+
+      <section class="section-sm"><div class="wrap">
+        <div class="chart-card" data-reveal>
+          <div class="chart-top">
+            <div><h3>실력 변화</h3><p class="sub" style="margin:4px 0 0;color:var(--muted);font-size:14px">주간 평균 · 스쿼드 평균과 비교</p></div>
+            <div class="seg" role="tablist" id="growth-tabs">
+              <button type="button" role="tab" aria-selected="true" data-metric="adr">평균 딜량</button>
+              <button type="button" role="tab" aria-selected="false" data-metric="kd">K/D</button>
+              <button type="button" role="tab" aria-selected="false" data-metric="top10">TOP 10</button>
+            </div>
+          </div>
+          <div class="legend"><span><i style="background:var(--series-1)"></i>${esc(p.name)}</span><span><i class="dash"></i>스쿼드 평균</span></div>
+          <div class="chart" id="growth-chart"></div>
+          <p class="chart-note" id="growth-note"></p>
+        </div>
+      </div></section>
+
+      <section class="section-sm"><div class="wrap duo">
+        <div class="panel" data-reveal>
+          <div class="panel-head"><div><h3>주력 총기</h3><p class="sub">이 총으로 가장 많이 잡았어요</p></div><a class="more-link" href="#/weapons">총기 랭킹 ›</a></div>
+          <div class="weapon-mini">${myWeapons.map((x, i) => `
+            <div class="wm-row"><span class="wm-rank">${i + 1}</span><span class="wm-name">${esc(x.w.name)}<small>${x.w.cat}</small></span><strong class="num">${x.k}킬</strong>
+            <span class="bar"><i data-width="${(x.k / maxK * 100).toFixed(1)}"></i></span></div>`).join("") || '<p class="muted">총기 기록이 아직 없어요</p>'}</div>
+        </div>
+        <div class="panel" data-reveal>
+          <div class="panel-head"><div><h3>팀킬 기록</h3><p class="sub">전체 킬 중 아군을 잡은 비중</p></div><a class="more-link" href="#/rank/teamkill">팀킬 랭킹 ›</a></div>
+          <div class="tk-big num">${tkShare.toFixed(1)}<span style="font-size:.45em;color:var(--muted)">%</span></div>
+          <p class="tk-sub">${p.teamKills}번 팀킬 · 적 ${p.kills}킬</p>
+          <ul class="tk-list"><li><span>최근 팀킬</span><strong>${p.teamKillDetail?.recent ? `${p.teamKillDetail.recent.date.slice(5)} ${esc(p.teamKillDetail.recent.map)} · ${esc(p.teamKillDetail.recent.weapon)}` : "기록 없음"}</strong></li><li><span>가장 많이 당한 대원</span><strong>${p.teamKillDetail?.favoriteVictim ? `${esc(p.teamKillDetail.favoriteVictim.name)} (${p.teamKillDetail.favoriteVictim.count}회)` : "기록 없음"}</strong></li></ul>
+        </div>
+      </div></section>`;
+    }
+    afterHooks.player = () => {
+      drawGrowth();
+      $("growth-tabs").addEventListener("click", e => {
+        const b = e.target.closest("[data-metric]"); if (!b) return;
+        growthMetric = b.dataset.metric;
+        $("growth-tabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+        drawGrowth(true);
+      });
+    };
+
+    /* 실력 변화 라인차트: 단일 y축, 2px 선, 크로스헤어 + 툴팁, 끝점 직접 라벨 */
+    function drawGrowth(animate = false) {
+      const host = $("growth-chart"); if (!host) return;
+      const me = MOCK.growth[activePlayerId]?.[growthMetric] ?? [];
+      const sq = MOCK.squadGrowth[activePlayerId]?.[growthMetric] ?? [];
+      const labels = MOCK.weeks[activePlayerId] ?? [];
+      if (labels.length < 2 || !me.length || !sq.length) {
+        host.innerHTML = '<div class="empty">비교할 주간 기록이 아직 부족해요</div>';
+        $("growth-note").textContent = "경기가 더 쌓이면 주간 변화가 표시돼요.";
+        return;
+      }
+      const fmtV = v => growthMetric === "kd" ? v.toFixed(2) : growthMetric === "top10" ? v + "%" : String(v);
+      const W = 760, H = 300, L = 44, R = 70, T = 16, B = 34;
+      const all = [...me, ...sq];
+      let lo = Math.min(...all), hi = Math.max(...all);
+      const pad = (hi - lo) * .2 || 1; lo = Math.max(0, lo - pad); hi = hi + pad;
+      const x = i => L + i * (W - L - R) / (labels.length - 1);
+      const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+      const ticks = Array.from({ length: 4 }, (_, i) => lo + (hi - lo) * i / 3);
+      const path = arr => arr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+      host.innerHTML = `
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="주간 ${growthMetric} 추이">
+          <g class="grid">${ticks.map(t => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>`).join("")}</g>
+          <g class="axis">${ticks.map(t => `<text x="${L - 10}" y="${y(t) + 4}" text-anchor="end">${fmtV(growthMetric === "kd" ? +t.toFixed(2) : Math.round(t))}</text>`).join("")}
+            ${labels.map((l, i) => `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${l}</text>`).join("")}</g>
+          <path class="ln sq" d="${path(sq)}" fill="none" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="6 4" stroke-linecap="round"/>
+          <path class="ln me" d="${path(me)}" fill="none" stroke="var(--series-1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          ${me.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="var(--series-1)" stroke="var(--indigo)" stroke-width="2"/>`).join("")}
+          <text class="end-label" x="${x(me.length - 1) + 10}" y="${y(me.at(-1)) + 4}">${fmtV(me.at(-1))}</text>
+          <text class="end-label" x="${x(sq.length - 1) + 10}" y="${y(sq.at(-1)) + 4}" style="fill:var(--muted)">${fmtV(sq.at(-1))}</text>
+          <line id="xhair" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="rgba(255,255,255,.35)" stroke-width="1" opacity="0"/>
+          <rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/>
+        </svg>
+        <div class="tip" id="growth-tip"></div>`;
+      const delta = me.at(-1) - me[0];
+      $("growth-note").innerHTML = `첫 주 대비 <strong>${delta >= 0 ? "+" : ""}${growthMetric === "kd" ? delta.toFixed(2) : Math.round(delta)}${growthMetric === "top10" ? "%p" : ""}</strong> · 스쿼드 평균보다 <strong>${fmtV(+(me.at(-1) - sq.at(-1)).toFixed(2))}</strong> 높아요`;
+      if (animate || hasGsap) host.querySelectorAll(".ln").forEach(p => { const len = p.getTotalLength(); p.style.strokeDasharray = p.classList.contains("sq") ? "6 4" : `${len}`; if (!p.classList.contains("sq")) { p.style.strokeDashoffset = len; p.getBoundingClientRect(); p.style.transition = "stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1)"; p.style.strokeDashoffset = 0; } });
+      const svg = host.querySelector("svg"), tip = $("growth-tip"), xh = $("xhair");
+      const move = ev => {
+        const pt = svg.getBoundingClientRect();
+        const px = (ev.clientX - pt.left) / pt.width * W;
+        const i = Math.max(0, Math.min(labels.length - 1, Math.round((px - L) / ((W - L - R) / (labels.length - 1)))));
+        xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("opacity", 1);
+        tip.innerHTML = `<b>${labels[i]} 주</b><div><span><i style="background:var(--series-1)"></i>나</span><strong>${fmtV(me[i])}</strong></div><div><span><i style="background:var(--series-2)"></i>스쿼드</span><strong>${fmtV(sq[i])}</strong></div>`;
+        const left = x(i) / W * pt.width;
+        tip.style.left = Math.min(pt.width - 160, Math.max(0, left + 12)) + "px";
+        tip.style.top = (y(me[i]) / H * pt.height - 30) + "px";
+        tip.classList.add("on");
+      };
+      const hit = svg.querySelector(".hit");
+      hit.addEventListener("pointermove", move);
+      hit.addEventListener("pointerleave", () => { tip.classList.remove("on"); xh.setAttribute("opacity", 0); });
+    }
+
+    /* ---------- 랭킹 (미션 포인트 / 팀킬) ---------- */
+    function renderRank(tab = "points") {
+      const ranked = [...MOCK.players].sort((a, b) => b.points - a.points);
+      const max = ranked[0].points;
+      const medal = ["var(--gold)", "var(--silver)", "var(--bronze)"];
+      const [a, b, c] = ranked;
+      const pod = (p, i, cls = "") => `<a class="pod ${cls}" href="#/player/${p.id}"><span class="medal" style="background:${medal[i]}">${i + 1}</span><h3>${esc(p.name)}</h3><div class="pts num">${fmt(p.points)}<small> 점</small></div><div class="meta">미션 ${p.missions}개 완료</div></a>`;
+      const tk = [...MOCK.players].map(p => ({ p, share: p.teamKillShare ?? (p.teamKills / Math.max(1, p.kills + p.teamKills) * 100) })).sort((x, y) => y.share - x.share);
+      const tkMax = tk[0].share || 1;
+      return `
+      <header class="hero op-hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax"><p class="eyebrow" data-reveal>${esc(MOCK.season.label)}</p><h1 class="display-xl" data-reveal>Ranking</h1><p class="lead" data-reveal>파티 미션을 깨면 포인트가 쌓여요. 매달 1위는 이달의 MVP!</p></div>
+      </header>
+      <section class="section-sm"><div class="wrap">
+        <div class="season-bar" data-reveal><strong>${esc(MOCK.season.label)} 진행 중</strong><span class="muted">시즌 종료까지 <span class="count">${MOCK.season.remainingDays}일</span> · 월별 기록은 자동 분리</span>
+          <div class="seg" role="tablist"><a role="tab" class="${tab !== "teamkill" ? "" : ""}" href="#/rank" style="display:inline-flex;align-items:center;height:40px;padding:0 18px;border-radius:12px;font-weight:600;${tab !== "teamkill" ? "background:#fff;color:#000" : "color:var(--muted)"}">미션 포인트</a><a role="tab" href="#/rank/teamkill" style="display:inline-flex;align-items:center;height:40px;padding:0 18px;border-radius:12px;font-weight:600;${tab === "teamkill" ? "background:#fff;color:#000" : "color:var(--muted)"}">팀킬 비중</a></div></div>
+        ${tab === "teamkill" ? `
+          <div class="chart-card" data-reveal>
+            <div class="chart-top"><div><h3>팀킬 비중</h3><p class="sub" style="margin:4px 0 0;color:var(--muted);font-size:14px">(팀킬 ÷ 전체 킬) · 높을수록 아군이 위험해요</p></div></div>
+            <div class="tk-chart" style="margin-top:20px">${tk.map(({ p, share }) => `
+              <div class="tk-row"><span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</span><span class="bar" title="${share.toFixed(1)}%"><i data-width="${(share / tkMax * 100).toFixed(1)}"></i></span><span><strong>${share.toFixed(1)}%</strong> · ${p.teamKills}회</span></div>`).join("")}</div>
+            <p class="chart-note">🏆 <strong>${esc(tk[0].p.name)}</strong>님이 이달의 "아군 최대 위협"이에요. 재미용 기록이고 포인트에는 영향 없어요.</p>
+          </div>` : `
+          <div class="podium" data-reveal>${pod(b, 1)}${pod(a, 0, "first")}${pod(c, 2)}</div>
+          <div class="lb">${ranked.slice(3).map((p, i) => `
+            <a class="lb-row" href="#/player/${p.id}"><span class="r">${i + 4}</span><span class="n">${esc(p.name)}<small>미션 ${p.missions}개</small></span><span class="bar"><i data-width="${(p.points / max * 100).toFixed(1)}"></i></span><span class="p num">${fmt(p.points)}</span></a>`).join("")}</div>`}
+      </div></section>
+
+      ${tab === "teamkill" ? "" : `
+      <section class="section-sm"><div class="wrap">
+        <div class="head" data-reveal><div><h2 class="display-md">시즌 보상</h2><p>돈 안 드는 명예 보상 위주 · 상품은 스쿼드가 원할 때만 추가</p></div></div>
+        <div class="reward-grid">
+          <div class="reward gold"><span class="tier"><i style="background:var(--gold)"></i>1위 · 이달의 MVP</span><ul>
+            <li><span><strong>디스코드 역할 "이달의 MVP"</strong> + 전용 이름 색 (한 달)</span></li>
+            <li><span><strong>사이트 금테 프로필</strong>과 명예의 전당 영구 등록</span></li>
+            <li><span><strong>다음 달 미션 1개 직접 지정권</strong></span></li>
+            <li><span>킬내기 팀 드래프트 <strong>1픽 권한</strong></span></li></ul></div>
+          <div class="reward"><span class="tier"><i style="background:var(--silver)"></i>2위</span><ul>
+            <li><span>디스코드 역할 <strong>"실버 스쿼드"</strong></span></li>
+            <li><span>서버 커스텀 이모지 <strong>1개 제작권</strong></span></li>
+            <li><span>프로필 은색 배지</span></li></ul></div>
+          <div class="reward"><span class="tier"><i style="background:var(--bronze)"></i>3위</span><ul>
+            <li><span>음성 채널 이름 <strong>1주 변경권</strong></span></li>
+            <li><span>프로필 동색 배지</span></li>
+            <li><span>하이라이트 <strong>메인 고정 1회</strong></span></li></ul></div>
+        </div>
+      </div></section>
+      <section class="section"><div class="wrap">
+        <div class="head" data-reveal><div><h2 class="display-md">명예의 전당</h2><p>역대 이달의 MVP</p></div></div>
+        <div class="hof" data-reveal>${MOCK.hof.map(([m, w, s]) => `<div class="hof-item"><div class="m">${m}</div><div class="w">♛ ${esc(w)}</div><div class="s">${s}</div></div>`).join("")}</div>
+      </div></section>`}`;
+    }
+
+    /* ---------- 총기 ---------- */
+    let weaponCat = "전체";
+    function renderWeapons() {
+      const cats = ["전체", "AR", "DMR", "SR", "SMG", "SG"];
+      return `
+      <header class="hero op-hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax"><p class="eyebrow" data-reveal>총기별 킬 랭킹</p><h1 class="display-xl" data-reveal>Arsenal</h1><p class="lead" data-reveal>누가 어떤 총의 주인인지 확인하세요.</p></div>
+      </header>
+      <section class="section-sm"><div class="wrap">
+        <div class="filters" id="weapon-filters" data-reveal>${cats.map(c => `<button type="button" aria-pressed="${c === weaponCat}" data-cat="${c}">${c}</button>`).join("")}</div>
+        <div class="weapon-grid" id="weapon-grid">${weaponCards()}</div>
+      </div></section>`;
+    }
+    function weaponCards() {
+      return MOCK.weapons.filter(w => weaponCat === "전체" || w.cat === weaponCat).map(w => {
+        const [king, ...rest] = w.top;
+        const max = king[1];
+        return `<article class="weapon">
+          <div class="weapon-head"><div><h3>${esc(w.name)}</h3><p>${w.cat} · 스쿼드 합계 ${w.kills}킬</p></div><span class="tag change" style="font-size:13px">${w.cat}</span></div>
+          <a class="king" href="#/player/${byName(king[0])?.id || "p1"}"><span class="crown" aria-hidden="true">♛</span><div><strong>${esc(king[0])}</strong><span>${king[1]}킬 · 이 총의 주인</span></div></a>
+          <div class="killers">${w.top.map(([n, k]) => `<div class="killer"><span>${esc(n)}</span><em class="num">${k}</em><span class="bar"><i data-width="${(k / max * 100).toFixed(1)}"></i></span></div>`).join("")}</div>
+        </article>`;
+      }).join("");
+    }
+    afterHooks.weapons = () => {
+      $("weapon-filters").addEventListener("click", e => {
+        const b = e.target.closest("[data-cat]"); if (!b) return;
+        weaponCat = b.dataset.cat;
+        $("weapon-filters").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        $("weapon-grid").innerHTML = weaponCards();
+        if (hasGsap) tweenIn("#weapon-grid > *", { y: 30, opacity: 0 }, { duration: .5, stagger: .06 });
+        requestAnimationFrame(() => requestAnimationFrame(() => fillBars($("weapon-grid"))));
+      });
+    };
+
+    /* ---------- 하이라이트 ---------- */
+    let hlWho = "전체";
+    function renderHighlights() {
+      const f = MOCK.highlights.find(h => h.feature) ?? MOCK.highlights[0];
+      return `
+      <header class="hero op-hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax"><p class="eyebrow" data-reveal>스쿼드 명장면 아카이브</p><h1 class="display-xl" data-reveal>Highlights</h1><p class="lead" data-reveal>내 인생샷을 올려서 영원히 박제하세요.</p>
+          <div style="margin-top:28px" data-reveal><button class="btn-green" type="button" data-open-upload>＋ 하이라이트 올리기</button></div></div>
+      </header>
+      ${f ? `<section class="section-sm"><div class="wrap">
+        <a class="hl-feature" data-reveal href="${esc(f.mediaUrl)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
+          ${mediaArt(f.map || "사녹", f.id, `<span class="play" aria-hidden="true">▶</span><span class="dur">${f.mediaType === "link" ? "LINK" : "FILE"}</span><span class="art-chip">최근 등록</span>`, f.mediaType === "image" ? f.mediaUrl : "")}
+          <div class="info"><span class="tag new" style="align-self:flex-start">이번 주 픽</span><h3>${esc(f.title)}</h3><p class="muted" style="margin:0">${esc(f.desc)}</p>
+            <div class="hl-meta"><span>${esc(f.who)}</span><span>${f.map} · ${f.date}</span><span class="likes">♥ ${f.likes}</span></div></div>
+        </a>
+      </div></section>` : '<section class="section-sm"><div class="wrap"><div class="empty">아직 올라온 하이라이트가 없어요. 첫 장면을 박제해 보세요.</div></div></section>'}
+      <section class="section"><div class="wrap">
+        <div class="head" data-reveal><div><h2 class="display-md">전체 영상</h2><p>${MOCK.highlights.length}개</p></div>
+          <div class="filters" id="hl-filters" style="margin:0">${["전체", ...MOCK.players.slice(0, 4).map(p => p.name)].map(n => `<button type="button" aria-pressed="${n === hlWho}" data-who="${esc(n)}">${esc(n)}</button>`).join("")}</div></div>
+        <div class="hl-grid" id="hl-grid">${hlGrid()}</div>
+      </div></section>`;
+    }
+    const hlGrid = () => MOCK.highlights.filter(h => hlWho === "전체" || h.who === hlWho).map(h => hlCard(h).replace(/style="[^"]*"/, "")).join("") || `<div class="empty" style="grid-column:1/-1">아직 올라온 영상이 없어요</div>`;
+    afterHooks.highlights = () => {
+      $("hl-filters").addEventListener("click", e => {
+        const b = e.target.closest("[data-who]"); if (!b) return;
+        hlWho = b.dataset.who;
+        $("hl-filters").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+        $("hl-grid").innerHTML = hlGrid();
+        if (hasGsap) tweenIn("#hl-grid > *", { y: 30, opacity: 0 }, { duration: .5, stagger: .06 });
+      });
+    };
+
+    /* ---------- 패치노트 ---------- */
+    function renderPatch(idx = "0") {
+      const i = Math.min(MOCK.patches.length - 1, Number(idx) || 0);
+      const p = MOCK.patches[i];
+      return `
+      <header class="hero op-hero center">
+        <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="wrap parallax"><p class="eyebrow" data-reveal>업데이트마다 정리</p><h1 class="display-xl" data-reveal>Patch Notes</h1><p class="lead" data-reveal>총기 반동부터 복각 소식까지, 우리 스쿼드에 영향 있는 것만 골라서.</p></div>
+      </header>
+      <section class="section-sm"><div class="wrap patch-layout">
+        <nav class="timeline" aria-label="업데이트 목록">${MOCK.patches.map((x, k) => `<a class="tl-item" href="#/patch/${k}" aria-current="${k === i}"><strong>${esc(x.v)}</strong><span>${x.date}</span></a>`).join("")}</nav>
+        <div>
+          <div class="patch-hero" data-reveal><span class="eyebrow" style="margin:0">${p.date} · ${esc(p.v)}</span><h2>${esc(p.title)}</h2><p>${esc(p.summary)}</p>
+            <div class="patch-tags">${p.tags.map(t => `<span class="tag ${t}">${TAGS[t]}</span>`).join("")}</div></div>
+          ${p.impact ? `<div class="callout" data-reveal><span class="ic">🎯</span><div><strong>우리 스쿼드 영향</strong><p>${esc(p.impact)}</p></div></div>` : ""}
+          ${p.weapons ? `<div class="patch-sec"><h3 data-reveal>🔫 총기 밸런스</h3>${p.weapons.map(w => `
+            <div class="chg" data-reveal><div class="chg-name">${esc(w.name)}<br><span class="tag ${w.type}">${TAGS[w.type]}</span></div>
+              <div class="stat-diff">${w.stats.map(([k, a, b, d]) => `<div class="diff"><span>${k}</span><span class="vals"><span class="old">${a}</span><span class="arrow">→</span><span class="new ${d}">${b}</span></span></div>`).join("")}<p>${esc(w.note)}</p></div></div>`).join("")}</div>` : ""}
+          ${p.returns ? `<div class="patch-sec"><h3 data-reveal>↺ 복각 · 돌아온 것들</h3><div class="return-grid">${p.returns.map(([t, s, m], k) => `<div class="return-card" data-reveal>${art(m, t + k, `<span class="art-chip">${esc(m)}</span>`)}<div class="b"><strong>${esc(t)}</strong><span>${esc(s)}</span></div></div>`).join("")}</div></div>` : ""}
+          ${!p.weapons ? `<a class="btn-primary" style="display:inline-flex;align-items:center;margin-top:20px;text-decoration:none" href="${esc(p.url)}" target="_blank" rel="noopener">공식 패치노트 열기 ›</a>` : ""}
+        </div>
+      </div></section>`;
+    }
+
+    /* ---------- 경기 상세 ---------- */
+    async function renderMatch(id) {
+      currentMatch = await api(`/matches/${encodeURIComponent(id)}`);
+      const m = currentMatch;
+      const linkedImage = MOCK.highlights.find(h => h.matchId === m.matchId && h.mediaType === "image")?.mediaUrl ?? "";
+      const mvp = m.team[0] ?? null;
+      const title = m.placement === 1 ? "치킨 디너!" : m.placement <= 10 ? `TOP 10 · ${m.placement}위` : `${m.placement}위로 마무리`;
+      return `
+        <header class="hero center" style="padding-bottom:80px">
+          <div class="mesh" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="wrap parallax">
+            <a class="back" href="#/">‹ 최근 경기</a>
+            <p class="eyebrow" data-reveal>${esc(m.map)} · ${esc(m.date)} · ${esc(m.mode || "스쿼드")}</p>
+            <p class="rank-giant num" data-reveal>#${m.placement ?? "-"}</p>
+            <h1 class="display-md" data-reveal>${title}</h1>
+            <div class="sum" data-reveal>
+              <div><strong class="num">${m.kills}</strong><span>팀 킬</span></div>
+              <div><strong class="num">${fmt(m.damage)}</strong><span>팀 딜량</span></div>
+              <div><strong class="num">${Math.floor(m.durationSeconds / 60)}:${String(m.durationSeconds % 60).padStart(2, "0")}</strong><span>경기 시간</span></div>
+            </div>
+          </div>
+        </header>
+        ${linkedImage ? `<section class="section-sm"><div class="wrap">${mediaArt(m.map, m.matchId, '<span class="art-chip">연결된 경기 스크린샷</span>', linkedImage)}</div></section>` : ""}
+        <section class="section"><div class="wrap">
+          <div class="head" data-reveal><div><h2 class="display-md">팀원별 기록</h2><p>AI 봇 킬은 제외한 사람 상대 킬만 표시해요</p></div></div>
+          <div class="team">${m.team.map(t => `
+            <a class="member ${t === mvp ? "is-mvp" : ""}" ${t.id ? `href="#/player/${encodeURIComponent(t.id)}"` : ""} style="color:inherit;text-decoration:none">
+              <div class="member-top"><div><h3>${esc(t.name)}</h3><p class="role">${esc(t.pubgName)}${t.died ? "" : " · 생존"}</p></div>${t === mvp ? '<span class="badge green">MVP</span>' : ""}</div>
+              <dl class="mini"><div><dt>킬</dt><dd class="num">${t.kills}</dd></div><div><dt>어시</dt><dd class="num">${t.assists}</dd></div><div><dt>딜량</dt><dd class="num">${fmt(t.damage)}</dd></div></dl>
+              <div class="share"><div class="share-label"><span>팀 딜 비중</span><span>${Math.round(t.damageShare)}%</span></div><div class="bar"><i data-width="${t.damageShare}"></i></div></div>
+            </a>`).join("") || '<div class="empty">기록된 파티원이 없어요</div>'}</div>
+          <div class="match-nav">
+            ${m.olderMatchId ? `<a class="btn-primary btn-ghost" style="display:inline-flex;align-items:center;text-decoration:none" href="#/match/${encodeURIComponent(m.olderMatchId)}">‹ 이전 경기</a>` : '<span></span>'}
+            ${m.newerMatchId ? `<a class="btn-primary" style="display:inline-flex;align-items:center;text-decoration:none" href="#/match/${encodeURIComponent(m.newerMatchId)}">다음 경기 ›</a>` : ""}
+          </div>
+        </div></section>`;
     }
 
     /* ---------- Motion (GSAP ScrollTrigger) ---------- */
@@ -597,244 +1210,175 @@
       renderDots();
     }
 
-    /* ---------- Screens ---------- */
-    function showScreen(name) {
-      document.querySelectorAll("[data-screen]").forEach(s => s.classList.toggle("is-active", s.dataset.screen === name));
-      document.querySelectorAll(".nav-link").forEach(b => b.setAttribute("aria-selected", String(b.dataset.screenLink === name)));
-      window.scrollTo(0, 0);
-      const screen = document.querySelector(`[data-screen="${name}"]`);
-      requestAnimationFrame(() => initMotion(screen));
+
+    /* ---------- 실제 API 데이터 연결 ---------- */
+    const SITE_ROOT = API.replace(/\/api$/, "");
+    let uploadMatches = [];
+    const absoluteMediaUrl = value => value?.startsWith("/") ? SITE_ROOT + value : value || "";
+    const compactDate = value => value ? value.slice(5, 10).replace("-", ".") : "날짜 없음";
+    const duration = seconds => `${Math.floor((seconds || 0) / 60)}:${String((seconds || 0) % 60).padStart(2, "0")}`;
+
+    function mapHighlights(items) {
+      return items.map((h, index) => ({
+        id: h.id,
+        title: h.title,
+        desc: h.description || "등록 대원이 직접 고른 장면이에요.",
+        who: h.name,
+        map: h.map || "경기 미연결",
+        date: compactDate(h.matchDate || h.createdAt),
+        likes: h.likes || 0,
+        feature: index === 0,
+        mediaUrl: absoluteMediaUrl(h.mediaUrl),
+        mediaType: h.mediaType,
+        matchId: h.matchId
+      }));
     }
-    async function setScreen(name) {
+
+    async function bootstrap() {
+      app.innerHTML = '<section class="section"><div class="wrap"><div class="empty">DROPLOG 기록을 불러오는 중...</div></div></section>';
       try {
-        if (name === "operator") return await openOperator(state.operatorId ?? data.players[0]?.id);
-        if (name === "report") return await openReport(state.matchId ?? data.recent[0]?.matchId);
-        showScreen("search");
+        const [summary, playerList, recent, weapons, teamKills, mission, hall, highlights, config, updates] = await Promise.all([
+          api("/summary"), api("/players"), api("/matches/recent?limit=12"), api("/weapons?limit=24"),
+          api("/teamkills"), api("/missions/leaderboard"), api("/missions/hall-of-fame"),
+          api("/highlights?limit=50"), api("/highlights/config"), api("/updates?limit=8")
+        ]);
+        const detailRows = await Promise.all(playerList.map(async base => {
+          const [detail, insights] = await Promise.all([
+            api(`/players/${encodeURIComponent(base.id)}`),
+            api(`/players/${encodeURIComponent(base.id)}/insights`)
+          ]);
+          return { base, detail, insights };
+        }));
+        const teamKillMap = new Map(teamKills.map(row => [row.id, row]));
+        const missionMap = new Map(mission.rows.map(row => [row.id, row]));
+
+        MOCK.players = detailRows.map(({ detail, insights }) => {
+          const tk = teamKillMap.get(detail.id) || { teamKills: 0, enemyKills: detail.kills, share: 0 };
+          const score = missionMap.get(detail.id) || { points: 0, missions: 0, rank: null };
+          MOCK.weeks[detail.id] = insights.trend?.weeks || [];
+          MOCK.growth[detail.id] = insights.trend?.me || { adr: [], kd: [], top10: [] };
+          MOCK.squadGrowth[detail.id] = insights.trend?.squad || { adr: [], kd: [], top10: [] };
+          return {
+            id: detail.id, name: detail.displayName, pubg: detail.pubgName, games: detail.games,
+            kd: detail.kd, adr: detail.adr, top10: detail.top10, wins: detail.wins, kills: detail.kills,
+            hs: detail.headshotRate, longest: detail.longestKill, teamKills: tk.teamKills,
+            teamKillShare: tk.share, points: score.points, missions: score.missions,
+            missionRank: score.rank, teamKillDetail: insights.teamKills
+          };
+        });
+
+        MOCK.weapons = weapons.map(w => ({
+          name: w.name, cat: w.category, kills: w.kills,
+          top: w.top.map(row => [row.name, row.kills, row.id])
+        }));
+        MOCK.highlights = mapHighlights(highlights);
+        uploadMatches = recent;
+        MOCK.matches = recent.slice(0, 3).map(m => ({
+          id: m.matchId, map: m.map, date: compactDate(m.date), mode: m.mode,
+          dur: duration(m.durationSeconds), placement: m.placement, kills: m.kills, damage: m.damage,
+          photoUrl: MOCK.highlights.find(h => h.matchId === m.matchId && h.mediaType === "image")?.mediaUrl || ""
+        }));
+        const [year, month] = mission.month.split("-");
+        MOCK.summary = summary;
+        MOCK.season = { label: `${year}년 ${Number(month)}월 미션 시즌`, remainingDays: mission.remainingDays };
+        MOCK.hof = hall.map(row => [
+          `${row.month.slice(0, 4)}년 ${Number(row.month.slice(5))}월`, row.name,
+          `${fmt(row.points)}점 · 미션 ${row.missions}개`
+        ]);
+        MOCK.patches = updates.map(item => {
+          const version = item.title.match(/update\s*([\d.]+)/i)?.[1];
+          return {
+            v: version ? `UPDATE ${version}` : "PUBG 공식 공지", date: item.date || "최근",
+            title: item.title, tags: item.tags?.length ? item.tags : ["change"], summary: item.summary,
+            impact: "공식 공지 원문에서 총기 반동·맵 복각·시스템 변경을 확인할 수 있어요.", url: item.url
+          };
+        });
+        uploadConfig = config;
+        const playerNav = document.querySelector('[data-nav="player"]');
+        if (playerNav && MOCK.players[0]) playerNav.href = `#/player/${encodeURIComponent(MOCK.players[0].id)}`;
+        fillUploadOptions();
+        if (!location.hash) history.replaceState(null, "", "#/");
+        await router();
       } catch (error) {
-        showError(`데이터를 불러오지 못했어요: ${error.message}`);
+        app.innerHTML = `<section class="section"><div class="wrap"><div class="empty">실제 기록을 불러오지 못했어요.<br>${esc(error.message)}<br><small>봇 폴더에서 npm run web을 실행했는지 확인해 주세요.</small></div></div></section>`;
       }
     }
 
-    /* ---------- 1. Search ---------- */
-    function renderSearch() {
-      const s = data.summary;
-      const sanhok = s.maps.find(m => m.name === "사녹")?.matches ?? 0;
-      const taego = s.maps.find(m => m.name === "태이고")?.matches ?? 0;
-      $("member-chips").innerHTML = data.players.map(o => `<button type="button" class="chip" data-operator="${esc(o.id)}">${esc(o.displayName)}</button>`).join("");
-      const words = ["Sanhok", "Taego", `${s.matches} matches`, "Winner winner", "Chicken dinner"];
-      const line = words.map(w => `<span>${esc(w)} <i>✦</i></span>`).join("");
-      $("marquee").innerHTML = line + line;
-      const pct = n => s.matches ? Math.round(n / s.matches * 100) : 0;
-      $("facts").innerHTML = `
-        <div class="stat blurple"><span class="stat-value num" ${countAttr(s.matches)}>${s.matches}</span><div><span class="stat-label">수집된 경기</span><span class="stat-note">${s.firstRecord ?? "-"}부터</span></div></div>
-        <div class="stat"><span class="stat-value num" ${countAttr(sanhok)}>${sanhok}</span><div><span class="stat-label">사녹</span><span class="stat-note">전체의 ${pct(sanhok)}%</span></div></div>
-        <div class="stat"><span class="stat-value num" ${countAttr(taego)}>${taego}</span><div><span class="stat-label">태이고</span><span class="stat-note">전체의 ${pct(taego)}%</span></div></div>
-        <div class="stat magenta"><span class="stat-value num" ${countAttr(s.squadChickens)}>${s.squadChickens}</span><div><span class="stat-label">스쿼드 치킨</span><span class="stat-note">등록 대원 ${s.registeredPlayers}명 기준</span></div></div>`;
-      $("member-track").innerHTML = data.players.map(o => `
-        <button type="button" class="member-card" data-operator="${esc(o.id)}">
-          <span class="avatar" aria-hidden="true">${esc(o.displayName.slice(0, 1))}</span>
-          <h3>${esc(o.displayName)}</h3>
-          <p class="id">${esc(o.pubgName)}</p>
-          <dl class="mini">
-            <div><dt>K/D</dt><dd class="num">${Number(o.kd).toFixed(2)}</dd></div>
-            <div><dt>평균 딜</dt><dd class="num">${o.adr}</dd></div>
-            <div><dt>경기</dt><dd class="num">${o.games}</dd></div>
-          </dl>
-        </button>`).join("");
-      $("recent-operations").innerHTML = data.recent.map((m, i) => `
-        <button type="button" class="match-card ${i === 0 ? "is-feature" : ""}" data-match="${esc(m.matchId)}">
-          <span class="meta">${esc(m.map)} · ${m.date} · ${mmss(m.durationSeconds)}</span>
-          ${m.placement === 1 ? '<span class="badge">치킨</span>' : ""}
-          <span class="big-rank num">#${m.placement ?? "-"}</span>
-          <h3>${esc(headline(m.placement))}</h3>
-          <p>팀 ${m.kills}킬 · ${fmt(m.damage)} 딜량</p>
-        </button>`).join("");
-      initCarousel("members");
+    function fillUploadOptions() {
+      $("f-who").innerHTML = MOCK.players.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.pubg)}</option>`).join("");
+      $("f-match").innerHTML = '<option value="">연결 안 함</option>' + uploadMatches.map(m =>
+        `<option value="${esc(m.matchId)}">${compactDate(m.date)} ${esc(m.map)} · #${m.placement ?? "-"}</option>`
+      ).join("");
+      $("drop").querySelector("span:last-of-type").textContent = `MP4 · WebM · JPG · PNG · 최대 ${uploadConfig.maxUploadMb}MB`;
     }
 
-    function findOperator(q) {
-      q = q.trim().toLowerCase();
-      if (!q) return null;
-      const exact = data.players.find(o => o.displayName.toLowerCase() === q || o.pubgName.toLowerCase() === q);
-      if (exact) return exact;
-      const partial = data.players.filter(o => o.displayName.toLowerCase().includes(q) || o.pubgName.toLowerCase().includes(q));
-      return partial.length === 1 ? partial[0] : null;
-    }
-
-    async function openOperator(id) {
-      if (!id) return;
-      if (id !== state.operatorId) { state.mapIndex = 0; state.filter = "all"; state.page = 1; }
-      state.operatorId = id;
-      $("unregistered-state").classList.remove("is-visible");
-      const [player, log] = await Promise.all([
-        api(`/players/${encodeURIComponent(id)}`),
-        api(`/players/${encodeURIComponent(id)}/matches?${logQuery()}`)
-      ]);
-      data.player = player; data.log = log;
-      renderOperator();
-      showScreen("operator");
-    }
-
-    /* ---------- 2+3. Operator ---------- */
-    function renderOperator() {
-      const o = data.player;
-      $("operator-name").textContent = o.displayName;
-      $("operator-id").textContent = o.pubgName;
-      $("operator-range").innerHTML = `<span>${o.games}경기</span><span>${o.first ?? "-"} – ${o.last ?? "-"}</span><span>최장 킬 ${o.longestKill}m</span>`;
-      $("operator-metrics").innerHTML = `
-        <div class="stat blurple"><span class="stat-value num" ${countAttr(o.kd, 2)}>${Number(o.kd).toFixed(2)}</span><div><span class="stat-label">K/D</span><span class="stat-note">${o.kills}킬 · 헤드샷 ${o.headshotRate}%</span></div></div>
-        <div class="stat magenta"><span class="stat-value num" ${countAttr(o.adr)}>${o.adr}</span><div><span class="stat-label">평균 딜량</span><span class="stat-note">경기당 피해량</span></div></div>
-        <div class="stat"><span class="stat-value num" ${countAttr(o.top10, 1, "%")}>${o.top10}%</span><div><span class="stat-label">TOP 10</span><span class="stat-note">${o.top10Count}회 진입</span><div class="meter"><span data-width="${o.top10}"></span></div></div></div>
-        <div class="stat"><span class="stat-value num" ${countAttr(o.wins)}>${o.wins}</span><div><span class="stat-label">치킨</span><span class="stat-note">승률 ${o.winRate}%</span><div class="meter"><span data-width="${Math.min(100, o.winRate * 10)}"></span></div></div></div>`;
-      $("map-tabs").innerHTML = o.maps.map((map, i) => `<button type="button" role="tab" aria-selected="${i === state.mapIndex}" data-map-index="${i}">${esc(map.name)}</button>`).join("");
-      document.querySelectorAll("#log-filter button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.filter === state.filter)));
-      renderMapPanel(false);
-      renderLog(false);
-    }
-
-    function renderMapPanel(animate = true) {
-      const o = data.player;
-      const map = o.maps[state.mapIndex];
-      if (!map) { $("map-panel").innerHTML = `<div class="empty" style="grid-column:1/-1">아직 수집된 맵 기록이 없어요</div>`; return; }
-      const rows = [
-        ["승률", `${map.winRate}%`, Math.min(100, map.winRate * 8)],
-        ["평균 딜량", map.adr, map.adr / Math.max(300, map.adr) * 100],
-        ["평균 생존", mmss(map.survivalSeconds), Math.min(100, map.survivalSeconds / 1800 * 100)]
-      ];
-      $("map-panel").innerHTML = `
-        <div class="map-hero"><span class="badge">${map.games}경기</span><div><h3>${esc(map.name)}</h3><p class="muted" style="margin:10px 0 0">전체 ${o.games}경기 중 ${Math.round(map.games / o.games * 100)}%</p></div></div>
-        <div class="map-bars">${rows.map(([label, text, width]) => `<div class="bar-row"><span>${label}</span><span class="bar"><i data-width="${width.toFixed(1)}"></i></span><strong class="num">${text}</strong></div>`).join("")}</div>`;
-      if (animate) {
-        if (hasGsap) tweenIn("#map-panel > *", { y: 24, opacity: 0 }, { duration: .5, stagger: .08 });
-        requestAnimationFrame(() => requestAnimationFrame(() => fillBars($("map-panel"))));
-      }
-    }
-
-    const logQuery = () => `map=${encodeURIComponent(state.filter)}&page=${state.page}&limit=${PER_PAGE}`;
-    async function loadLog() {
-      data.log = await api(`/players/${encodeURIComponent(state.operatorId)}/matches?${logQuery()}`);
-      state.page = data.log.page;
-      renderLog(true);
-    }
-
-    function renderLog(animate = true) {
-      const { items, total, page, pages } = data.log;
-      $("operation-log").innerHTML = items.length ? items.map(m => {
-        const cls = m.placement === 1 ? "is-win" : m.placement <= 10 ? "is-top" : "";
-        return `<div class="row ${cls}" data-match="${esc(m.matchId)}" role="button" tabindex="0">
-          <span class="row-rank num">${m.placement}</span>
-          <span><p class="row-title">${esc(m.map)} · ${m.kills}킬 ${fmt(m.damage)}딜 ${m.placement === 1 ? '<span class="badge green">치킨</span>' : ""}</p><p class="row-sub">${modeLabel(m.mode)} · 생존 ${mmss(m.survivalSeconds)} · 어시 ${m.assists} · 부활 ${m.revives}</p></span>
-          <span class="row-date num">${m.date.slice(5)}</span>
-          <span class="row-arrow" aria-hidden="true">›</span>
-        </div>`;
-      }).join("") : `<div class="empty">이 맵의 경기 기록이 아직 없어요</div>`;
-
-      // 페이지 번호는 현재 페이지 주변만 보여줍니다 (1 … 4 5 6 … 34)
-      const nums = [...new Set([1, page - 1, page, page + 1, pages])].filter(p => p >= 1 && p <= pages).sort((a, b) => a - b);
-      const btns = [`<button type="button" data-page="${page - 1}" ${page === 1 ? "disabled" : ""} aria-label="이전 페이지">‹</button>`];
-      nums.forEach((p, i) => {
-        if (i && p - nums[i - 1] > 1) btns.push(`<button type="button" disabled aria-hidden="true">…</button>`);
-        btns.push(`<button type="button" data-page="${p}" ${p === page ? 'aria-current="page"' : ""}>${p}</button>`);
-      });
-      btns.push(`<button type="button" data-page="${page + 1}" ${page === pages ? "disabled" : ""} aria-label="다음 페이지">›</button>`);
-      $("pager").innerHTML = btns.join("");
-      const start = total ? (page - 1) * PER_PAGE + 1 : 0;
-      $("pager-info").textContent = `${total}경기 중 ${start}–${start + items.length - (total ? 1 : 0)}`;
-      if (animate && hasGsap) tweenIn("#operation-log > *", { x: -30, opacity: 0 }, { duration: .45, stagger: .06 });
-    }
-
-    /* ---------- 4. Report ---------- */
-    async function openReport(matchId) {
-      if (!matchId) return;
-      data.match = await api(`/matches/${encodeURIComponent(matchId)}`);
-      state.matchId = matchId;
-      renderReport();
-      showScreen("report");
-    }
-
-    function renderReport() {
-      const m = data.match;
-      $("report-meta").textContent = `${m.map} · ${modeLabel(m.mode)} · ${m.date}`;
-      $("report-rank").textContent = `#${m.placement ?? "-"}`;
-      $("report-title").textContent = headline(m.placement);
-      $("report-summary").innerHTML = `
-        <div><strong class="num" ${countAttr(m.kills)}>${m.kills}</strong><span>팀 킬</span></div>
-        <div><strong class="num" ${countAttr(m.damage)}>${fmt(m.damage)}</strong><span>팀 딜량</span></div>
-        <div><strong class="num">${mmss(m.durationSeconds)}</strong><span>경기 시간</span></div>`;
-      const mvp = m.team.length && m.team[0].damage > 0 ? m.team[0] : null; // API가 딜량 순으로 정렬해서 줌
-      $("team-grid").innerHTML = m.team.length ? m.team.map(t => `
-        <article class="member ${t === mvp ? "is-mvp" : ""}" ${t.id ? `data-operator="${esc(t.id)}" style="cursor:pointer"` : ""}>
-          <div class="member-top"><div><h3>${esc(t.name)}</h3><p class="role">${esc(t.pubgName)}${t.died ? "" : " · 생존"}</p></div>${t === mvp ? '<span class="badge green">MVP</span>' : ""}</div>
-          <dl class="mini">
-            <div><dt>킬</dt><dd class="num">${t.kills}</dd></div>
-            <div><dt>어시</dt><dd class="num">${t.assists}</dd></div>
-            <div><dt>생존</dt><dd class="num">${mmss(t.survivalSeconds)}</dd></div>
-          </dl>
-          <div class="share"><div class="share-label"><span>딜량 ${fmt(t.damage)}</span><span>${Math.round(t.damageShare)}%</span></div><div class="bar"><i data-width="${t.damageShare}"></i></div></div>
-        </article>`).join("") : `<div class="empty" style="grid-column:1/-1">이 경기에는 기록된 파티원이 없어요</div>`;
-      $("prev-match").disabled = !m.olderMatchId;
-      $("next-match").disabled = !m.newerMatchId;
-    }
-
-    async function stepMatch(dir) {
-      const target = dir > 0 ? data.match.olderMatchId : data.match.newerMatchId;
-      if (!target) return;
-      const parts = $("report-hero").querySelectorAll("[data-reveal]");
-      const go = () => openReport(target).catch(e => showError(`경기를 불러오지 못했어요: ${e.message}`));
-      if (!hasGsap) return go();
-      gsap.to(parts, { x: dir > 0 ? 80 : -80, opacity: 0, duration: .25, stagger: .03, ease: "power2.in", onComplete: () => { gsap.set(parts, { x: 0 }); go(); } });
-    }
-
-    /* ---------- Events ---------- */
-    const guard = promise => promise.catch(e => showError(`데이터를 불러오지 못했어요: ${e.message}`));
+    /* ---------- 업로드 모달 ---------- */
+    const modal = $("upload-modal");
+    let selectedUploadFile = null;
     document.addEventListener("click", e => {
-      const link = e.target.closest("[data-screen-link]");
-      if (link) return void setScreen(link.dataset.screenLink);
-      const op = e.target.closest("[data-operator]");
-      if (op) return void guard(openOperator(op.dataset.operator));
-      const match = e.target.closest("[data-match]");
-      if (match) return void guard(openReport(match.dataset.match));
-      const mapTab = e.target.closest("[data-map-index]");
-      if (mapTab) {
-        state.mapIndex = Number(mapTab.dataset.mapIndex);
-        document.querySelectorAll("#map-tabs button").forEach(b => b.setAttribute("aria-selected", String(b === mapTab)));
-        return renderMapPanel(true);
+      if (e.target.closest("[data-open-upload]")) {
+        modal.classList.add("on");
+        $("upload-status").textContent = uploadConfig.uploadEnabled ? "영상 링크나 파일 중 하나를 선택해 주세요." : ".env에 WEB_ADMIN_KEY를 설정하고 웹 서버를 다시 켜면 업로드할 수 있어요.";
+        setTimeout(() => $("f-title").focus(), 50);
       }
-      const filter = e.target.closest("[data-filter]");
-      if (filter) {
-        state.filter = filter.dataset.filter; state.page = 1;
-        document.querySelectorAll("#log-filter button").forEach(b => b.setAttribute("aria-selected", String(b === filter)));
-        return void guard(loadLog());
-      }
-      const page = e.target.closest("[data-page]");
-      if (page && !page.disabled) {
-        state.page = Number(page.dataset.page);
-        guard(loadLog().then(() => $("operation-log").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" })));
-      }
+      if (e.target.closest("[data-close]") || e.target === modal) modal.classList.remove("on");
     });
-    document.addEventListener("keydown", e => {
-      const row = e.target.closest && e.target.closest(".row[data-match]");
-      if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); guard(openReport(row.dataset.match)); }
+    document.addEventListener("keydown", e => { if (e.key === "Escape") modal.classList.remove("on"); });
+    const drop = $("drop");
+    ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
+    drop.addEventListener("dragleave", e => { e.preventDefault(); drop.classList.remove("drag"); });
+    drop.addEventListener("drop", e => {
+      e.preventDefault(); drop.classList.remove("drag");
+      selectedUploadFile = e.dataTransfer.files[0] || null;
+      if (selectedUploadFile) drop.querySelector("strong").textContent = selectedUploadFile.name;
     });
-    $("prev-match").addEventListener("click", () => stepMatch(1));
-    $("next-match").addEventListener("click", () => stepMatch(-1));
-
-    $("search-form").addEventListener("submit", e => {
+    $("f-file").addEventListener("change", e => {
+      selectedUploadFile = e.target.files[0] || null;
+      if (selectedUploadFile) drop.querySelector("strong").textContent = selectedUploadFile.name;
+    });
+    $("upload-form").addEventListener("submit", async e => {
       e.preventDefault();
-      const input = $("player-search");
-      const o = findOperator(input.value);
-      if (o) return void guard(openOperator(o.id));
-      const box = $("unregistered-state");
-      $("unregistered-query").textContent = input.value.trim() ? `“${input.value.trim()}”` : "입력한 닉네임";
-      box.classList.remove("is-visible"); void box.offsetWidth; box.classList.add("is-visible");
-      input.focus();
+      const status = $("upload-status");
+      const title = $("f-title").value.trim();
+      const link = $("f-link").value.trim();
+      const accountId = $("f-who").value;
+      const matchId = $("f-match").value;
+      const description = $("f-desc").value.trim();
+      const key = $("f-key").value;
+      if (!uploadConfig.uploadEnabled) { status.textContent = "먼저 .env에서 WEB_ADMIN_KEY를 설정해 주세요."; return; }
+      if (!title || (!selectedUploadFile && !link)) { status.textContent = "제목과 영상 파일 또는 링크를 입력해 주세요."; return; }
+      status.textContent = "업로드 중... 창을 닫지 마세요.";
+      try {
+        const headers = { "X-Admin-Key": key };
+        let options;
+        if (selectedUploadFile) {
+          Object.assign(headers, {
+            "Content-Type": selectedUploadFile.type,
+            "X-Account-Id": encodeURIComponent(accountId),
+            "X-Title": encodeURIComponent(title),
+            "X-Description": encodeURIComponent(description),
+            "X-Match-Id": encodeURIComponent(matchId)
+          });
+          options = { method: "POST", headers, body: selectedUploadFile };
+        } else {
+          headers["Content-Type"] = "application/json";
+          options = { method: "POST", headers, body: JSON.stringify({ accountId, title, description, matchId: matchId || null, mediaUrl: link }) };
+        }
+        await api("/highlights", options);
+        MOCK.highlights = mapHighlights(await api("/highlights?limit=50"));
+        MOCK.matches.forEach(m => { m.photoUrl = MOCK.highlights.find(h => h.matchId === m.id && h.mediaType === "image")?.mediaUrl || ""; });
+        $("upload-form").reset(); selectedUploadFile = null;
+        drop.querySelector("strong").textContent = "영상 파일을 끌어다 놓거나 눌러서 선택";
+        modal.classList.remove("on"); location.hash = "#/highlights"; await router();
+      } catch (error) {
+        status.textContent = error.message;
+      }
     });
 
-    /* 스크롤 진행바 · 내비 숨김 · 맨 위로 버튼 */
+    /* ---------- 스크롤 진행바 · 내비 숨김 · 맨 위로 ---------- */
     let lastY = 0;
     window.addEventListener("scroll", () => {
-      const y = window.scrollY;
-      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const y = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight;
       $("progress").style.transform = `scaleX(${max > 0 ? y / max : 0})`;
       $("nav").classList.toggle("is-hidden", y > lastY && y > 160);
       $("to-top").classList.toggle("is-visible", y > 600);
@@ -842,18 +1386,7 @@
     }, { passive: true });
     $("to-top").addEventListener("click", () => window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }));
 
-    /* 시작: 요약 · 대원 목록 · 최근 경기를 한 번에 불러옵니다 */
-    (async () => {
-      try {
-        [data.summary, data.players, data.recent] = await Promise.all([api("/summary"), api("/players"), api("/matches/recent?limit=3")]);
-        renderSearch();
-        initMotion(document.querySelector('[data-screen="search"]'));
-      } catch (error) {
-        showError("API 서버에 연결할 수 없어요. 봇 폴더에서 `node web/server.js`를 실행한 뒤 새로고침해 주세요.");
-        initMotion(document.querySelector('[data-screen="search"]'));
-      }
-    })();
+    bootstrap();
   </script>
-
 </body>
 </html>
