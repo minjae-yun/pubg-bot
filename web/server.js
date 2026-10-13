@@ -723,7 +723,7 @@ const server = createServer(async (req, res) => {
     try {
       return send(res, 201, await createHighlight(req));
     } catch (error) {
-      console.error(error);
+      if (!error.status) console.error(error);
       return send(res, error.status ?? 500, { error: error.status ? error.message : "업로드 중 서버 오류가 발생했어요" });
     }
   }
